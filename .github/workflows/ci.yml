@@ -1,0 +1,27 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -e "open-source/sdk-python[dev]"
+      - run: pytest open-source/sdk-python/tests/ -v
+
+  boundary-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check no private imports in OSS SDK
+        run: |
+          set -e
+          if grep -r "from juvera.attribution" open-source/sdk-python/juvera_sdk/; then echo "BOUNDARY VIOLATION"; exit 1; fi
+          if grep -r "from juvera.benchmarks" open-source/sdk-python/juvera_sdk/; then echo "BOUNDARY VIOLATION"; exit 1; fi
+          if grep -r "from juvera.jury" open-source/sdk-python/juvera_sdk/; then echo "BOUNDARY VIOLATION"; exit 1; fi
+          if grep -r "v1/attribution" open-source/sdk-python/juvera_sdk/; then echo "BOUNDARY VIOLATION"; exit 1; fi
+          if grep -r "v1/benchmarks" open-source/sdk-python/juvera_sdk/; then echo "BOUNDARY VIOLATION"; exit 1; fi
+          echo "Boundary check passed"
