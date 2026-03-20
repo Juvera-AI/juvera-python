@@ -48,7 +48,7 @@ def record_impact_signal(
         properties=properties,
     )
 
-    if config.is_local:
+    if config.is_local or config.debug:
         import json
         print(f"[juvera-debug] IMPACT_SIGNAL {json.dumps(signal.model_dump(by_alias=True, exclude_none=True), default=str)}")
         return
