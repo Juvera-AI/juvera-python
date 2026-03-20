@@ -7,6 +7,17 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.1.1] — 2026-03-20
+
+### Fixed
+
+- `work_item_id` now preserved in `impact.properties` so the server-side attribution join works correctly (was silently dropped in v0.1.0)
+- `debug=True` in `init()` now suppresses HTTP in `record_impact_signal()` — same behaviour as `endpoint="local"` (was firing real HTTP and raising connection errors)
+- Added `__version__` attribute — `juvera_sdk.__version__` no longer raises `AttributeError`
+- `record_handoff()` now emits `UserWarning` when called outside an active `agent_span` with no `work_item_id`, preventing silent trace disconnection
+- README rewritten with 30-second quickstart, core concepts, what gets emitted, common gotchas, and API reference
+- Added `examples/local_debug.py` — canonical local validation script
+
 ## [0.1.0] — 2026-03-19
 
 ### Added
