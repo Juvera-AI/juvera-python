@@ -1,6 +1,10 @@
 # juvera-python
 
-Instrument AI agents to emit traces and business-impact signals.
+[![PyPI](https://img.shields.io/pypi/v/juvera-sdk)](https://pypi.org/project/juvera-sdk/)
+[![Python](https://img.shields.io/pypi/pyversions/juvera-sdk)](https://pypi.org/project/juvera-sdk/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+Most observability tools tell you *how* your agent ran. Juvera tells you *what it was worth*.
 
 ```bash
 pip install juvera-sdk
@@ -64,9 +68,26 @@ with j.agent_span(
     span.set_error(exception)    # if something went wrong
 ```
 
-### `work_item_id` — the linking key
+### `work_item_id` — the attribution join key
 
-`work_item_id` connects a span to its impact signals. Use your system's native ID (Zendesk ticket, Jira issue, document ID). If omitted, a UUID is generated — but you lose cross-system attribution.
+This is the most important concept in the SDK.
+
+A `work_item_id` is a string you assign to one complete agent task — a support ticket, a sales opportunity, a compliance review. Every span and every impact signal that belongs to that task carries the same ID.
+
+When your system of record resolves the outcome (Zendesk closes a ticket, Salesforce marks a deal won), that event arrives at Juvera with a `source_record_id`. The backend joins it to the `work_item_id` that was active during the agent session — and that's how ROI gets attributed.
+
+**Without `work_item_id`:** you have traces.
+**With `work_item_id`:** you have attributed ROI.
+
+```python
+# Use your system's native ID — deterministic and debuggable
+work_item_id = f"wi_{ticket_id}"       # "wi_ZD98765"
+work_item_id = f"wi_opp_{opp_id}"     # "wi_opp_SF00123"
+
+# Or let the SDK generate one and retrieve it:
+with j.agent_span(agent_id="agent_01") as span:
+    wi_id = span.work_item_id          # UUID if you didn't pass one
+```
 
 ### `record_impact_signal` — business outcomes
 
@@ -165,6 +186,54 @@ with j.agent_span(agent_id="triage_agent", work_item_id=ticket_id) as span:
 
 ---
 
+## Framework examples
+
+### LangChain
+
+```python
+import juvera_sdk as j
+j.init(api_key="jvr_...", org_id="org_acme", domain="support")
+
+with j.agent_span(agent_id="lc_agent", work_item_id=f"wi_{ticket_id}") as span:
+    result = agent_executor.invoke({"input": user_message})
+    span.set_model("claude-sonnet-4-6", provider="anthropic")
+    # extract token counts from LangChain callback or response metadata
+```
+
+### OpenAI
+
+```python
+import juvera_sdk as j
+from openai import OpenAI
+
+j.init(api_key="jvr_...", org_id="org_acme", domain="sales")
+client = OpenAI()
+
+with j.agent_span(agent_id="oai_agent", work_item_id=f"wi_opp_{opp_id}") as span:
+    run = client.beta.threads.runs.create_and_poll(thread_id=tid, assistant_id=aid)
+    span.set_model(run.model, provider="openai")
+    if run.usage:
+        span.set_tokens(input=run.usage.prompt_tokens, output=run.usage.completion_tokens)
+```
+
+### Anthropic
+
+```python
+import juvera_sdk as j
+import anthropic
+
+j.init(api_key="jvr_...", org_id="org_acme", domain="legal")
+client = anthropic.Anthropic()
+
+with j.agent_span(agent_id="claude_agent", work_item_id=f"wi_{doc_id}") as span:
+    msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024,
+                                  messages=[{"role": "user", "content": text}])
+    span.set_model("claude-sonnet-4-6", provider="anthropic")
+    span.set_tokens(input=msg.usage.input_tokens, output=msg.usage.output_tokens)
+```
+
+---
+
 ## API reference
 
 | Call | Description |
@@ -205,6 +274,16 @@ with j.agent_span(agent_id="triage_agent", work_item_id=ticket_id) as span:
 **`work_item_id` is your attribution key.** Without it, Juvera cannot link a span to an impact signal. Use your system's native ID wherever possible.
 
 **Call `j.flush()` before process exit.** In batch/script contexts, spans may still be buffered. `flush()` guarantees they're exported.
+
+---
+
+## Known issues
+
+**v0.1.0** (fixed in v0.1.1):
+
+- `work_item_id` was silently dropped from the emitted ImpactSignal payload. Workaround: pass `properties={"work_item_id": "wi_..."}` manually.
+- `debug=True` did not suppress HTTP in `record_impact_signal` — use `endpoint="local"` instead.
+- `juvera_sdk.__version__` raised `AttributeError`.
 
 ---
 
