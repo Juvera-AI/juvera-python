@@ -58,6 +58,13 @@ class SignalMetadata(BaseModel):
     mapping_rule_id: Optional[str] = Field(default=None, alias="mappingRuleId")
 
 
+def _merge_work_item_id(properties: Optional[Dict], work_item_id: Optional[str]) -> Dict:
+    props = dict(properties or {})
+    if work_item_id:
+        props.setdefault("work_item_id", work_item_id)
+    return props
+
+
 class ImpactSignal(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     signal_id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="signalId")
@@ -111,7 +118,7 @@ class ImpactSignal(BaseModel):
                         upper=min(1.0, confidence + 0.1),
                     ),
                 ),
-                properties=properties or {},
+                properties=_merge_work_item_id(properties, work_item_id),
             ),
             metadata=SignalMetadata(sourceSystem=source_system, sourceEvent=source_event)
             if source_system else None,
