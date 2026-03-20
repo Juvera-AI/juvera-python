@@ -44,3 +44,15 @@ def test_record_handoff_inherits_agent_id(sdk_init):
     spans = exporter.all_spans()
     handoff_span = next(s for s in spans if s.name == "agent.handoff")
     assert handoff_span.attributes.get("juvera.agent_id") == "agent_99"
+
+
+def test_record_handoff_outside_span_has_no_agent_id(sdk_init):
+    exporter = sdk_init
+    import warnings
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        j.record_handoff(reason="outside_context", reviewer_role="manager")
+
+    spans = exporter.all_spans()
+    handoff_span = next(s for s in spans if s.name == "agent.handoff")
+    assert "juvera.agent_id" not in handoff_span.attributes
