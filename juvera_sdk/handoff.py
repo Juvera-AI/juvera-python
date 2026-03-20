@@ -14,6 +14,14 @@ def record_handoff(
     config = _get_config()
 
     wid = work_item_id or _ctx.get_work_item_id()
+    if wid is None:
+        import warnings
+        warnings.warn(
+            "record_handoff() called outside an active agent_span with no work_item_id. "
+            "The handoff span will be emitted on a new trace with no work_item context. "
+            "Call record_handoff() inside a 'with agent_span(...)' block, or pass work_item_id explicitly.",
+            stacklevel=2,
+        )
     cost = config.human_reviewer_cost_per_hour_usd * (15 / 60)  # 15-min estimate
 
     tracer = _tracer.get_tracer()
