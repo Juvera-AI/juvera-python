@@ -1,5 +1,7 @@
 """Juvera SDK — open instrumentation for AI agents."""
 from __future__ import annotations
+
+__version__ = "0.1.1"
 from juvera_sdk.config import JuveraConfig
 import juvera_sdk.tracer as _tracer
 
@@ -46,6 +48,6 @@ from juvera_sdk.signals import record_impact_signal  # noqa: E402
 from juvera_sdk.handoff import record_handoff   # noqa: E402
 
 __all__ = [
-    "init", "agent_span", "record_impact_signal",
+    "__version__", "init", "agent_span", "record_impact_signal",
     "record_handoff", "flush", "shutdown",
 ]
