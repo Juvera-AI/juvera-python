@@ -50,6 +50,46 @@ Run `python examples/01_manual_instrumentation.py` to try it end-to-end.
 
 ---
 
+## Two happy paths
+
+### Path A — local debug (no API key needed)
+
+```python
+j.init(api_key="any", org_id="org_demo", endpoint="local", domain="support")
+```
+
+Everything prints to stdout. Nothing leaves your machine. Use this to validate your payload shape before connecting to a real endpoint.
+
+### Path B — real model call with OpenAI
+
+```python
+import os
+from openai import OpenAI
+import juvera_sdk as j
+
+j.init(api_key=os.environ["JUVERA_API_KEY"], org_id="org_acme",
+       endpoint="https://ingest.juvera.ai", domain="support")
+client = OpenAI()
+
+with j.agent_span(agent_id="support_agent", work_item_id=f"wi_{ticket_id}") as span:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": ticket_text}],
+    )
+    span.set_model("gpt-4o-mini", provider="openai")
+    if response.usage:
+        span.set_tokens(input=response.usage.prompt_tokens,
+                        output=response.usage.completion_tokens)
+
+j.record_impact_signal(impact_type="cost_reduction", value=18.5,
+                        impact_category="ticket_deflection", source_system="zendesk")
+j.flush()
+```
+
+See `examples/support_roi.py` for the full version with fallback to local mode.
+
+---
+
 ## Core concepts
 
 ### `agent_span` — one unit of work
@@ -274,6 +314,12 @@ with j.agent_span(agent_id="claude_agent", work_item_id=f"wi_{doc_id}") as span:
 **`work_item_id` is your attribution key.** Without it, Juvera cannot link a span to an impact signal. Use your system's native ID wherever possible.
 
 **Call `j.flush()` before process exit.** In batch/script contexts, spans may still be buffered. `flush()` guarantees they're exported.
+
+**`agent_id=None` on handoff spans (v0.1.2 and earlier):** Fixed in v0.1.3. Handoff spans now inherit `juvera.agent_id` from the enclosing `agent_span` automatically.
+
+**`work_item_id` location:** It lives in `impact.properties.work_item_id`, not `agent.workItemId`. The gateway schema enforces `additionalProperties: false` on the agent block — adding `workItemId` there causes a 422 error. The SDK places it correctly.
+
+**Forgetting `j.flush()` in short-lived scripts:** In batch scripts or serverless functions, spans may still be buffered when the process exits. Always call `j.flush()` before shutdown.
 
 ---
 
