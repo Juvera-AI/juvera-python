@@ -32,3 +32,6 @@ def record_handoff(
         span.set_attribute("juvera.supervision_cost_usd", cost)
         if wid:
             span.set_attribute("juvera.work_item_id", wid)
+        aid = _ctx.get_agent_id()
+        if aid:
+            span.set_attribute("juvera.agent_id", aid)

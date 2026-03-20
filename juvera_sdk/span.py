@@ -63,8 +63,10 @@ def agent_span(
         if business_unit:
             otel_span.set_attribute("juvera.business_unit", business_unit)
 
-        token = _ctx._work_item_id.set(wid)
+        wid_token = _ctx._work_item_id.set(wid)
+        aid_token = _ctx._agent_id.set(agent_id)
         try:
             yield AgentSpan(otel_span, wid)
         finally:
-            _ctx._work_item_id.reset(token)
+            _ctx._work_item_id.reset(wid_token)
+            _ctx._agent_id.reset(aid_token)

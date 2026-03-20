@@ -34,3 +34,13 @@ def test_record_handoff_sets_supervision_cost(sdk_init):
     handoff_span = next(s for s in spans if s.name == "agent.handoff")
     # 15 min at $50/hr = $12.50
     assert handoff_span.attributes["juvera.supervision_cost_usd"] == pytest.approx(12.5)
+
+
+def test_record_handoff_inherits_agent_id(sdk_init):
+    exporter = sdk_init
+    with j.agent_span(agent_id="agent_99", work_item_id="wi_007"):
+        j.record_handoff(reason="escalation", reviewer_role="manager")
+
+    spans = exporter.all_spans()
+    handoff_span = next(s for s in spans if s.name == "agent.handoff")
+    assert handoff_span.attributes.get("juvera.agent_id") == "agent_99"
