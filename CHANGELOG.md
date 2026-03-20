@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.1.2] — 2026-03-20
+
+### Changed
+
+- Version bump to 0.1.2 (0.1.1 PyPI upload was incomplete)
+
 ## [0.1.1] — 2026-03-20
 
 ### Fixed
