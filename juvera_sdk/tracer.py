@@ -21,7 +21,7 @@ def setup_provider(config: JuveraConfig, exporter=None) -> TracerProvider:
         "juvera.domain": config.domain or "",
         "juvera.agent_id": config.agent_id or "",
         "juvera.environment": "production" if not config.debug else "dev",
-        "juvera.sdk_version": "0.1.2",
+        "juvera.sdk_version": "0.1.3",
     })
 
     _provider = TracerProvider(resource=resource)

@@ -1,7 +1,7 @@
 """Juvera SDK — open instrumentation for AI agents."""
 from __future__ import annotations
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 from juvera_sdk.config import JuveraConfig
 import juvera_sdk.tracer as _tracer
 

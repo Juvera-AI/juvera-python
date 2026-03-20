@@ -7,6 +7,21 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.1.3] — 2026-03-20
+
+### Fixed
+
+- Handoff spans now inherit `juvera.agent_id` from the enclosing `agent_span` context (was `None` in v0.1.2)
+
+### Added
+
+- `examples/support_roi.py` — runnable OpenAI + Juvera integration example with local-mode fallback
+
+### Docs
+
+- README: added "Two happy paths" section (local debug + real model call with OpenAI)
+- README: expanded common gotchas with `work_item_id` location clarification and flush reminder
+
 ## [0.1.2] — 2026-03-20
 
 ### Changed
