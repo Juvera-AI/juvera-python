@@ -7,6 +7,17 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.1.4] — 2026-03-20
+
+### Docs — contract clarification
+
+- `work_item_id` is preserved in `impact.properties.work_item_id` in the emitted impact signal payload. This is the correct and stable location for `0.1.x`.
+- `work_item_id` is **not** part of the `agent` block. The gateway schema enforces `additionalProperties: false` on that block; adding `workItemId` there would cause 422 errors.
+- A future schema version may promote `work_item_id` to a first-class context field (e.g. `context.workItemId`), with a backward-compatible migration path. That is not part of the `0.1.x` contract.
+- README expanded with an explicit "Where `work_item_id` appears" table and JSON example.
+
+No SDK code changes in this release. All 23 tests pass.
+
 ## [0.1.3] — 2026-03-20
 
 ### Fixed

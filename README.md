@@ -119,6 +119,29 @@ When your system of record resolves the outcome (Zendesk closes a ticket, Salesf
 **Without `work_item_id`:** you have traces.
 **With `work_item_id`:** you have attributed ROI.
 
+#### Where `work_item_id` appears in emitted payloads
+
+| Signal type | Location | Key |
+|-------------|----------|-----|
+| Trace span | OTel span attribute | `juvera.work_item_id` |
+| Impact signal | `impact.properties` | `work_item_id` |
+
+The impact signal payload looks like:
+
+```json
+{
+  "agent": { "agentId": "support_agent", "orgId": "org_acme" },
+  "impact": {
+    "impactType": "cost_reduction",
+    "properties": {
+      "work_item_id": "wi_ZD98765"
+    }
+  }
+}
+```
+
+`work_item_id` is **not** in the `agent` block. The current gateway schema enforces `additionalProperties: false` on that block. A future release will promote `work_item_id` to a first-class context field (e.g. `context.workItemId`), but `impact.properties.work_item_id` is the correct and stable location in `0.1.x`.
+
 ```python
 # Use your system's native ID — deterministic and debuggable
 work_item_id = f"wi_{ticket_id}"       # "wi_ZD98765"
