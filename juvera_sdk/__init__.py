@@ -46,8 +46,10 @@ def shutdown() -> None:
 from juvera_sdk.span import agent_span          # noqa: E402
 from juvera_sdk.signals import record_impact_signal  # noqa: E402
 from juvera_sdk.handoff import record_handoff   # noqa: E402
+from juvera_sdk.context import set_work_item, clear_work_item  # noqa: E402
 
 __all__ = [
     "__version__", "init", "agent_span", "record_impact_signal",
     "record_handoff", "flush", "shutdown",
+    "set_work_item", "clear_work_item",
 ]

@@ -49,8 +49,9 @@ def agent_span(
     from juvera_sdk import _get_config
     config = _get_config()
 
-    wid = work_item_id or str(uuid.uuid4())
+    wid = work_item_id or _ctx.get_work_item_id() or str(uuid.uuid4())
     eff_domain = domain or config.domain
+    eff_workflow_type = workflow_type or _ctx.get_workflow_type()
 
     tracer = _tracer.get_tracer()
     with tracer.start_as_current_span("agent.run") as otel_span:
@@ -58,8 +59,8 @@ def agent_span(
         otel_span.set_attribute("juvera.work_item_id", wid)
         if eff_domain:
             otel_span.set_attribute("juvera.domain", eff_domain)
-        if workflow_type:
-            otel_span.set_attribute("juvera.workflow_type", workflow_type)
+        if eff_workflow_type:
+            otel_span.set_attribute("juvera.workflow_type", eff_workflow_type)
         if business_unit:
             otel_span.set_attribute("juvera.business_unit", business_unit)
 
