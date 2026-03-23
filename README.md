@@ -7,7 +7,7 @@
 Most observability tools tell you *how* your agent ran. Juvera tells you *what it was worth*.
 
 ```bash
-pip install juvera-sdk
+pip install juvera-sdk==0.1.5
 ```
 
 ---
@@ -46,7 +46,7 @@ j.flush()
 [juvera-debug] IMPACT_SIGNAL {"signalId": "...", "impact": {"impactType": "cost_reduction", ...}}
 ```
 
-Run `python examples/01_manual_instrumentation.py` to try it end-to-end.
+Run `python examples/local_debug.py` to validate the SDK locally with no network calls.
 
 ---
 
@@ -60,15 +60,19 @@ j.init(api_key="any", org_id="org_demo", endpoint="local", domain="support")
 
 Everything prints to stdout. Nothing leaves your machine. Use this to validate your payload shape before connecting to a real endpoint.
 
-### Path B — real model call with OpenAI
+### Path B — real model call with OpenAI + local Juvera ingest
 
 ```python
 import os
 from openai import OpenAI
 import juvera_sdk as j
 
-j.init(api_key=os.environ["JUVERA_API_KEY"], org_id="org_acme",
-       endpoint="https://ingest.juvera.ai", domain="support")
+j.init(
+    api_key=os.environ["JUVERA_INGEST_API_KEY"],
+    org_id="org_acme",
+    endpoint=os.environ.get("JUVERA_INGEST_ENDPOINT", "http://localhost:8001"),
+    domain="support",
+)
 client = OpenAI()
 
 with j.agent_span(agent_id="support_agent", work_item_id=f"wi_{ticket_id}") as span:
@@ -81,12 +85,66 @@ with j.agent_span(agent_id="support_agent", work_item_id=f"wi_{ticket_id}") as s
         span.set_tokens(input=response.usage.prompt_tokens,
                         output=response.usage.completion_tokens)
 
-j.record_impact_signal(impact_type="cost_reduction", value=18.5,
-                        impact_category="ticket_deflection", source_system="zendesk")
+j.record_impact_signal(
+    impact_type="cost_reduction",
+    value=18.5,
+    impact_category="ticket_deflection",
+    source_system="zendesk",
+)
 j.flush()
 ```
 
-See `examples/support_roi.py` for the full version with fallback to local mode.
+See `examples/support_roi.py` for the full version with fallback to local mode and configurable batch runs.
+
+## Clean install verification
+
+Validate the published package in a fresh environment:
+
+```bash
+python3 -m venv /tmp/juvera-sdk-verify
+source /tmp/juvera-sdk-verify/bin/activate
+pip install --upgrade pip
+pip install juvera-sdk==0.1.5 openai
+python -c "import juvera_sdk; print(juvera_sdk.__version__, juvera_sdk.__file__)"
+```
+
+Expected result:
+
+- version prints `0.1.5`
+- import path points into the virtualenv `site-packages`, not your repo checkout
+
+## Real end-to-end test with OpenAI + local ingest
+
+Start the local Juvera stack:
+
+```bash
+docker compose --profile app up -d --build
+curl http://localhost:8001/health
+```
+
+Export the required credentials:
+
+```bash
+export OPENAI_API_KEY=sk-...
+export JUVERA_INGEST_API_KEY=jvr_demo_key
+export JUVERA_INGEST_ENDPOINT=http://localhost:8001
+export JUVERA_EXAMPLE_RUNS=10
+```
+
+Run the example:
+
+```bash
+python examples/support_roi.py
+```
+
+Expected result:
+
+- OpenAI returns real support replies
+- the SDK emits one trace batch per run to `/v1/traces`
+- the SDK emits one impact signal per run to `/v1/impact-signals`
+- the script prints the processed tickets, total run count, and total impact value
+
+If you want the fastest no-network proof first, run `python examples/local_debug.py`.
 
 ---
 
@@ -179,6 +237,48 @@ with j.agent_span(agent_id="agent_01", work_item_id="wi_123") as span:
 ```
 
 > **Gotcha:** Calling `record_handoff()` outside an active `agent_span` (or without an explicit `work_item_id`) emits the handoff on a new, disconnected trace. You'll see a warning if this happens.
+
+### Attach mode — add Juvera to existing telemetry
+
+If you already use Phoenix, Langfuse, or raw OpenTelemetry, add Juvera as a span processor without changing your existing setup:
+
+```python
+from opentelemetry.sdk.trace import TracerProvider
+from juvera_sdk.processor import JuveraSpanProcessor
+
+provider = TracerProvider(...)
+provider.add_span_processor(JuveraSpanProcessor(
+    api_key="jvr_...",
+    org_id="org_acme",
+))
+# Your existing processors (Phoenix, Langfuse) stay as-is
+```
+
+### Work item context for middleware
+
+Set work item context at the top of the call stack — all downstream `agent_span()` calls automatically inherit it:
+
+```python
+import juvera_sdk as j
+
+j.set_work_item("wi_ZD98765", workflow_type="ticket_deflection")
+# ... agent spans created deeper in the call stack pick this up ...
+j.clear_work_item()
+```
+
+FastAPI middleware example:
+
+```python
+@app.middleware("http")
+async def track_work_item(request, call_next):
+    work_item_id = request.headers.get("X-Work-Item-Id")
+    if work_item_id:
+        j.set_work_item(work_item_id)
+    try:
+        return await call_next(request)
+    finally:
+        j.clear_work_item()
+```
 
 ---
 
@@ -309,6 +409,9 @@ with j.agent_span(agent_id="claude_agent", work_item_id=f"wi_{doc_id}") as span:
 | `span.set_error(exception)` | Mark span as errored |
 | `j.record_impact_signal(impact_type, value, ...)` | Emit a business outcome event |
 | `j.record_handoff(reason, reviewer_role)` | Record a human-in-the-loop handoff |
+| `j.set_work_item(work_item_id, workflow_type)` | Set work item context for downstream spans |
+| `j.clear_work_item()` | Clear work item context |
+| `JuveraSpanProcessor(api_key, org_id, ...)` | Attach-mode span processor for existing TracerProviders |
 | `j.flush()` | Force-export buffered spans before process exit |
 | `j.shutdown()` | Release resources |
 
@@ -326,9 +429,23 @@ with j.agent_span(agent_id="claude_agent", work_item_id=f"wi_{doc_id}") as span:
 
 ---
 
+## Environment variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `OPENAI_API_KEY` | for live model calls | Auth for the OpenAI request in `examples/support_roi.py` |
+| `JUVERA_INGEST_API_KEY` | for live Juvera ingest | Auth for `POST /v1/traces` and `POST /v1/impact-signals` |
+| `JUVERA_INGEST_ENDPOINT` | optional | Defaults to `http://localhost:8001` for local testing |
+| `JUVERA_ORG_ID` | optional | Defaults to `org_demo` in the example |
+| `JUVERA_EXAMPLE_RUNS` | optional | Number of support tickets processed by `examples/support_roi.py` |
+
+---
+
 ## Common gotchas
 
 **`endpoint="local"` — always start here.** It prints traces and signals to stdout with no network calls. Validate your payload structure before pointing at a real endpoint.
+
+**`debug=True` disables real HTTP emission.** Use it only for local validation. For real ingestion, leave `debug=False` and point `endpoint` at your Juvera gateway.
 
 **`record_handoff()` must be inside an `agent_span`.** Calling it outside drops the trace context — the handoff emits on a new trace with no `work_item_id`. You'll get a `UserWarning` if this happens. Fix: move the call inside the `with agent_span(...)` block, or pass `work_item_id` explicitly.
 
@@ -371,4 +488,3 @@ This package has no dependency on any closed Juvera service. `endpoint="local"` 
 
 Apache 2.0 — see [LICENSE](LICENSE).
 
-Built by [Juvera](https://juvera.ai).

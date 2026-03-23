@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.1.5] — 2026-03-22
+
+### Added
+
+- `JuveraSpanProcessor` — standard OTel `SpanProcessor` for attach mode. Works with any `TracerProvider` (Phoenix, Langfuse, raw OTel). Use `provider.add_span_processor(JuveraSpanProcessor(...))` alongside your existing telemetry.
+- `set_work_item(work_item_id, workflow_type=None)` / `clear_work_item()` — context helpers for middleware and request handlers where `work_item_id` is known at the top of the call stack but `agent_span()` is called deeper.
+- PII detection (warn-only) — scans span attributes for email, phone, SSN, credit card, and API key patterns in debug/local mode. Prints warnings to stderr. Never modifies span data.
+
+### Changed
+
+- `init()` refactored internally to use `JuveraSpanProcessor`. Public API unchanged — all v0.1.4 code works without modification.
+- `agent_span()` now reads `work_item_id` and `workflow_type` from ContextVar as fallback (priority: explicit arg > ContextVar > auto-UUID).
+
 ## [0.1.4] — 2026-03-20
 
 ### Docs — contract clarification
