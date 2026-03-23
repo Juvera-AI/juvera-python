@@ -24,7 +24,7 @@ def init(
         api_key=api_key, org_id=org_id, endpoint=endpoint,
         service_name=service_name, domain=domain, agent_id=agent_id, debug=debug,
     )
-    _tracer.setup_provider(_config, exporter=_exporter)
+    _tracer.setup_provider(_config, _exporter=_exporter)
 
 
 def _get_config() -> JuveraConfig:

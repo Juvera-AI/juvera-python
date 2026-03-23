@@ -2,17 +2,20 @@
 from __future__ import annotations
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from juvera_sdk.config import JuveraConfig
-from juvera_sdk.exporters.debug import DebugExporter
-from juvera_sdk.exporters.http import JuveraSpanExporter
+from juvera_sdk.processor import JuveraSpanProcessor
 
 _provider: TracerProvider | None = None
 
 
-def setup_provider(config: JuveraConfig, exporter=None) -> TracerProvider:
-    """Create and register a TracerProvider. exporter kwarg overrides for tests."""
+def _get_version() -> str:
+    from juvera_sdk import __version__
+    return __version__
+
+
+def setup_provider(config: JuveraConfig, _exporter=None) -> TracerProvider:
+    """Create and register a TracerProvider with JuveraSpanProcessor."""
     global _provider
 
     resource = Resource.create({
@@ -21,23 +24,20 @@ def setup_provider(config: JuveraConfig, exporter=None) -> TracerProvider:
         "juvera.domain": config.domain or "",
         "juvera.agent_id": config.agent_id or "",
         "juvera.environment": "production" if not config.debug else "dev",
-        "juvera.sdk_version": "0.1.4",
+        "juvera.sdk_version": _get_version(),
     })
 
     _provider = TracerProvider(resource=resource)
-
-    if exporter is None:
-        if config.is_local:
-            exporter = DebugExporter()
-        else:
-            exporter = JuveraSpanExporter(config)
-
-    # Debug/test mode: SimpleSpanProcessor (synchronous, no buffering)
-    # Production mode: BatchSpanProcessor
-    if config.is_local or config.debug:
-        _provider.add_span_processor(SimpleSpanProcessor(exporter))
-    else:
-        _provider.add_span_processor(BatchSpanProcessor(exporter))
+    _provider.add_span_processor(
+        JuveraSpanProcessor(
+            api_key=config.api_key,
+            org_id=config.org_id,
+            endpoint=config.endpoint,
+            debug=config.debug,
+            domain=config.domain,
+            _exporter=_exporter,
+        )
+    )
 
     trace.set_tracer_provider(_provider)
     return _provider
