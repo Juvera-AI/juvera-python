@@ -12,6 +12,7 @@ class JuveraConfig:
     agent_id: str | None = None
     debug: bool = False
     human_reviewer_cost_per_hour_usd: float = 50.0
+    workflow_baselines: dict | None = None
 
     def __post_init__(self):
         if not self.api_key:

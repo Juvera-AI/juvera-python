@@ -7,6 +7,24 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.1.6] — 2026-03-24
+
+### Added
+
+- **Prompt/Completion Capture**: `span.set_prompt(text)` and `span.set_completion(text)` to record what the agent said
+- **Context Sources**: `span.add_context_source(name, doc_type, token_count)` for RAG pipeline visibility
+- **Enhanced Tool Calls**: `span.add_tool_call()` now accepts `duration_ms` and `error` parameters
+- **Custom Events**: `j.record_event(event_type, status, properties)` for guardrails, cache hits, retrievals
+- **ROI Estimator**: `j.estimate_roi(workflow_type, agent_cost_usd)` with industry-standard workflow baselines
+- **Workflow Baselines**: 7 built-in baselines (ticket_deflection, lead_qualification, document_review, data_extraction, code_review, compliance_check, content_generation)
+- **Custom Baselines**: `j.init(workflow_baselines={...})` to override defaults
+- **Attribute Normalizer**: Automatic mapping of Phoenix, Langfuse, and Braintrust attributes to Juvera conventions
+- **Debug Run Summary**: Aggregated stats printed on `j.flush()` in debug/local mode
+
+### Changed
+
+- `agent_span()` now propagates `workflow_type` into ContextVar for downstream use by `estimate_roi()`
+
 ## [0.1.5] — 2026-03-22
 
 ### Added

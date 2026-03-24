@@ -61,6 +61,7 @@ def test_version_attribute():
 
 def test_all_exports():
     expected = {"init", "agent_span", "record_impact_signal",
-                "record_handoff", "flush", "shutdown", "__version__",
+                "record_handoff", "record_event", "estimate_roi",
+                "flush", "shutdown", "__version__",
                 "set_work_item", "clear_work_item"}
     assert expected.issubset(set(j.__all__))

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "juvera-sdk"
-version = "0.1.5"
+version = "0.1.6"
 description = "Open instrumentation SDK for Juvera — emit agent telemetry and business-impact signals"
 readme = "README.md"
 license = { text = "Apache-2.0" }

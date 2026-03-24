@@ -23,11 +23,41 @@ class AgentSpan:
         self._span.set_attribute("gen_ai.usage.input_tokens", input)
         self._span.set_attribute("gen_ai.usage.output_tokens", output)
 
-    def add_tool_call(self, tool_name: str, status: str = "success") -> None:
-        self._span.add_event("tool.call", {
+    def set_prompt(self, text: str) -> None:
+        self._span.set_attribute("gen_ai.prompt", text)
+
+    def set_completion(self, text: str) -> None:
+        self._span.set_attribute("gen_ai.completion", text)
+
+    def add_context_source(
+        self,
+        name: str,
+        doc_type: str | None = None,
+        token_count: int | None = None,
+    ) -> None:
+        event_attrs: dict[str, str | int] = {"context.source.name": name}
+        if doc_type is not None:
+            event_attrs["context.source.doc_type"] = doc_type
+        if token_count is not None:
+            event_attrs["context.source.token_count"] = token_count
+        self._span.add_event("context.source", event_attrs)
+
+    def add_tool_call(
+        self,
+        tool_name: str,
+        status: str = "success",
+        duration_ms: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        event_attrs: dict[str, str | int] = {
             "tool.name": tool_name,
             "tool.status": status,
-        })
+        }
+        if duration_ms is not None:
+            event_attrs["tool.duration_ms"] = duration_ms
+        if error is not None:
+            event_attrs["tool.error"] = error
+        self._span.add_event("tool.call", event_attrs)
 
     def set_error(self, error: Exception) -> None:
         self._span.set_status(trace.StatusCode.ERROR, str(error))
@@ -66,8 +96,10 @@ def agent_span(
 
         wid_token = _ctx._work_item_id.set(wid)
         aid_token = _ctx._agent_id.set(agent_id)
+        wf_token = _ctx._workflow_type.set(eff_workflow_type)
         try:
             yield AgentSpan(otel_span, wid)
         finally:
             _ctx._work_item_id.reset(wid_token)
             _ctx._agent_id.reset(aid_token)
+            _ctx._workflow_type.reset(wf_token)

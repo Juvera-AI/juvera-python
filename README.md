@@ -24,17 +24,18 @@ j.init(
     domain="support",
 )
 
-with j.agent_span(agent_id="support_agent", work_item_id="wi_ZD98765") as span:
+with j.agent_span(agent_id="support_agent", work_item_id="wi_ZD98765",
+                   workflow_type="ticket_deflection") as span:
+    span.set_prompt("What is the refund policy?")
     span.set_model("gpt-4o-mini", provider="openai")
     span.set_tokens(input=420, output=180)
-    span.add_tool_call("lookup_order_status", status="success")
+    span.add_tool_call("lookup_crm", duration_ms=45)
+    span.add_context_source("policy_doc", doc_type="pdf", token_count=800)
+    span.set_completion("Our refund policy allows returns within 30 days.")
 
-    j.record_impact_signal(
-        impact_type="cost_reduction",
-        value=18.5,
-        impact_category="ticket_deflection",
-        source_system="zendesk",
-    )
+    j.record_event("guardrail_check", status="success")
+    roi = j.estimate_roi(agent_cost_usd=0.0017)
+    # {'estimated_savings_usd': 22.0, 'baseline_cost_usd': 22.0, ...}
 
 j.flush()
 ```
@@ -104,6 +105,67 @@ with j.agent_span(agent_id="triage_agent", work_item_id=ticket_id) as span:
 ```
 
 Must be called inside an `agent_span`. Calling it outside emits the handoff on a disconnected trace — the SDK warns if this happens.
+
+---
+
+## ROI estimation
+
+Most companies can't answer "what's this agent worth?" The SDK ships with **workflow baselines** — industry-standard benchmarks for common agent tasks:
+
+| Workflow Type | Human Cost | Human Time |
+|---|---|---|
+| `ticket_deflection` | $22 | 15 min |
+| `lead_qualification` | $35 | 25 min |
+| `document_review` | $75 | 45 min |
+| `data_extraction` | $18 | 12 min |
+| `code_review` | $95 | 30 min |
+| `compliance_check` | $120 | 60 min |
+| `content_generation` | $50 | 30 min |
+
+Set `workflow_type` on your span, then call `estimate_roi()`:
+
+```python
+with j.agent_span(agent_id="a1", work_item_id="wi_001",
+                   workflow_type="ticket_deflection") as span:
+    # ... agent logic ...
+    roi = j.estimate_roi(agent_cost_usd=2.50)
+    # roi = {'estimated_savings_usd': 19.50, 'baseline_cost_usd': 22.0, ...}
+```
+
+Override defaults with your own baselines:
+
+```python
+j.init(
+    api_key="jvr_key", org_id="org_id",
+    workflow_baselines={"internal_review": {"human_cost_usd": 60.0, "human_time_minutes": 40}},
+)
+```
+
+---
+
+## Custom events
+
+Record guardrail checks, cache hits, retrievals, and other custom node types:
+
+```python
+with j.agent_span(agent_id="a1", work_item_id="wi_001"):
+    j.record_event("guardrail_check", status="success", properties={"rule": "pii_filter"})
+    j.record_event("cache_hit", properties={"cache_key": "user_123"})
+```
+
+---
+
+## Multi-provider normalization
+
+Teams using Phoenix, Langfuse, or Braintrust get automatic attribute normalization. Third-party attributes are mapped to Juvera conventions — no code changes needed:
+
+| Source Attribute | Normalized To |
+|---|---|
+| `input.value` (Phoenix) | `gen_ai.prompt` |
+| `output.value` (Phoenix) | `gen_ai.completion` |
+| `langfuse.input` / `langfuse.output` | `gen_ai.prompt` / `gen_ai.completion` |
+| `braintrust.input` / `braintrust.output` | `gen_ai.prompt` / `gen_ai.completion` |
+| `llm.token_count.prompt` / `llm.token_count.completion` | `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` |
 
 ---
 
@@ -232,17 +294,22 @@ with j.agent_span(agent_id="lc_agent", work_item_id=f"wi_{ticket_id}") as span:
 
 | Call | Description |
 |------|-------------|
-| `j.init(api_key, org_id, ...)` | Configure once at startup |
-| `j.agent_span(agent_id, work_item_id, ...)` | Context manager for one unit of work. Yields `AgentSpan`. |
+| `j.init(api_key, org_id, ..., workflow_baselines)` | Configure once at startup |
+| `j.agent_span(agent_id, work_item_id, workflow_type, ...)` | Context manager for one unit of work. Yields `AgentSpan`. |
 | `span.set_model(model, provider)` | Record which LLM was used |
 | `span.set_tokens(input, output)` | Record token consumption |
-| `span.add_tool_call(name, status)` | Record a tool/function call |
+| `span.set_prompt(text)` | Record the prompt sent to the model |
+| `span.set_completion(text)` | Record the model's completion/response |
+| `span.add_context_source(name, doc_type, token_count)` | Record a RAG context source |
+| `span.add_tool_call(name, status, duration_ms, error)` | Record a tool/function call with optional timing and error |
 | `span.set_error(exception)` | Mark span as errored |
+| `j.record_event(event_type, status, properties)` | Record a custom event (guardrail, cache hit, etc.) |
+| `j.estimate_roi(workflow_type, agent_cost_usd)` | Estimate ROI using workflow baselines |
 | `j.record_impact_signal(impact_type, value, ...)` | Emit a business outcome event |
 | `j.record_handoff(reason, reviewer_role)` | Record a human-in-the-loop handoff |
 | `j.set_work_item(work_item_id, workflow_type)` | Set work item context for downstream spans |
 | `j.clear_work_item()` | Clear work item context |
-| `j.flush()` | Force-export buffered spans before process exit |
+| `j.flush()` | Force-export buffered spans. In debug mode, prints run summary. |
 | `j.shutdown()` | Release resources |
 
 **`init()` parameters**
@@ -256,6 +323,7 @@ with j.agent_span(agent_id="lc_agent", work_item_id=f"wi_{ticket_id}") as span:
 | `domain` | `None` | `support`, `marketing`, `sales`, or `custom` |
 | `agent_id` | `None` | Default agent ID (overridable per span) |
 | `debug` | `False` | Enable debug output and PII scanning |
+| `workflow_baselines` | `None` | Custom ROI baselines `{"type": {"human_cost_usd": N, "human_time_minutes": N}}` |
 
 **`JuveraSpanProcessor` parameters**
 

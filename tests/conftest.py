@@ -19,3 +19,20 @@ def dev_config() -> JuveraConfig:
         domain="support",
         debug=True,
     )
+
+
+@pytest.fixture
+def attach_setup():
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.resources import Resource
+    from juvera_sdk.processor import JuveraSpanProcessor
+    exporter = MockExporter()
+    provider = TracerProvider(
+        resource=Resource.create({"service.name": "test-app"})
+    )
+    provider.add_span_processor(JuveraSpanProcessor(
+        api_key="jvr_test", org_id="org_test",
+        endpoint="local", _exporter=exporter,
+    ))
+    yield provider, exporter
+    provider.shutdown()
