@@ -74,10 +74,7 @@ claude plugin add ./juvera-python/claude-plugin
 
 | Command | What it does |
 |---|---|
-| `/juvera` | Detect framework and add instrumentation |
-| `/juvera validate` | Check instrumentation correctness |
-| `/juvera roi` | Estimate ROI using workflow baselines |
-| `/juvera traces` | Inspect recent local traces |
+| `/juvera:juvera-instrument` | Detect framework and add instrumentation (progressive Tier 1→2→3) |
 
 ### What it does
 
