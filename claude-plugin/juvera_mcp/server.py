@@ -83,7 +83,8 @@ def juvera_validate(file_path: str) -> dict:
     if not _INIT_PATTERN.search(code):
         issues.append({"severity": "error", "message": "Missing j.init() call — SDK must be initialized before use"})
 
-    if not _SPAN_PATTERN.search(code):
+    has_spans = _SPAN_PATTERN.search(code)
+    if not has_spans:
         issues.append({"severity": "error", "message": "Missing agent_span() — no spans are being created"})
 
     if not _FLUSH_PATTERN.search(code):
@@ -92,7 +93,7 @@ def juvera_validate(file_path: str) -> dict:
     if not _SHUTDOWN_PATTERN.search(code):
         issues.append({"severity": "warning", "message": "Missing j.shutdown() — resources may not be released cleanly"})
 
-    if _SPAN_PATTERN.search(code):
+    if has_spans:
         if not _SET_MODEL_PATTERN.search(code):
             issues.append({"severity": "info", "message": "No span.set_model() found — model tracking recommended"})
         if not _SET_TOKENS_PATTERN.search(code):
@@ -141,12 +142,12 @@ def _guess_workflow_type(code: str, file_path: str) -> str | None:
     """Guess workflow type from code content and file name."""
     text = (code + " " + file_path).lower()
     for keyword, wf_type in WORKFLOW_HINTS.items():
-        if keyword in text:
+        if re.search(rf"\b{keyword}\b", text):
             return wf_type
     return None
 
 
-def _tier1_snippet(framework: str, workflow_type: str | None) -> str:
+def _tier1_snippet(workflow_type: str | None) -> str:
     """Return Tier 1 (minimal) instrumentation snippet."""
     wf = f'"{workflow_type}"' if workflow_type else '"ticket_deflection"  # adjust to your workflow'
     return f'''import os
@@ -214,6 +215,8 @@ def juvera_suggest(file_path: str) -> dict:
     path = Path(file_path)
     if not path.exists():
         return {"error": f"File not found: {file_path}"}
+    if path.suffix != ".py":
+        return {"error": "Only Python files are supported"}
 
     code = path.read_text()
     frameworks = _detect_frameworks(code)
@@ -228,7 +231,7 @@ def juvera_suggest(file_path: str) -> dict:
         "tiers": {
             "minimal": {
                 "description": "init + agent_span + model + tokens + flush + shutdown",
-                "snippet": _tier1_snippet(frameworks[0] if frameworks else "openai", workflow_type),
+                "snippet": _tier1_snippet(workflow_type),
             },
             "standard": {
                 "description": "+ prompt/completion capture + tool call tracking",
@@ -320,7 +323,11 @@ def juvera_traces(log_file_path: str, agent_id: str | None = None, work_item_id:
         result["spans"] = [s for s in result["spans"] if s["agent_id"] == agent_id]
     if work_item_id:
         result["spans"] = [s for s in result["spans"] if s["work_item_id"] == work_item_id]
+
+    # Recompute totals after filtering
     result["span_count"] = len(result["spans"])
+    result["total_input_tokens"] = sum(s.get("input_tokens") or 0 for s in result["spans"])
+    result["total_output_tokens"] = sum(s.get("output_tokens") or 0 for s in result["spans"])
 
     return result
 
