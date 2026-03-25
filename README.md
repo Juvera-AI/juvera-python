@@ -46,15 +46,47 @@ j.flush()
 
 ## Claude Code Plugin
 
-The SDK ships with a [Claude Code plugin](claude-plugin/) that auto-detects your AI framework (OpenAI, Anthropic, LangChain, etc.) and instruments it with Juvera for ROI tracking.
+The SDK ships with a [Claude Code plugin](claude-plugin/) that auto-detects your AI framework (OpenAI, Anthropic, LangChain, CrewAI, LlamaIndex) and instruments it with Juvera — no manual setup needed.
+
+### Install
+
+**Marketplace (recommended):**
 
 ```bash
-# Install via marketplace (recommended)
 /plugin marketplace add Juvera-AI/juvera-python
 /plugin install juvera@juvera-plugins
 ```
 
-Then use `/juvera` to instrument, validate, and estimate ROI directly from Claude Code.
+**Git URL:**
+
+```bash
+claude plugin add https://github.com/Juvera-AI/juvera-python/tree/main/claude-plugin
+```
+
+**Local (from a clone):**
+
+```bash
+git clone https://github.com/Juvera-AI/juvera-python.git
+claude plugin add ./juvera-python/claude-plugin
+```
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `/juvera` | Detect framework and add instrumentation |
+| `/juvera validate` | Check instrumentation correctness |
+| `/juvera roi` | Estimate ROI using workflow baselines |
+| `/juvera traces` | Inspect recent local traces |
+
+### What it does
+
+1. **Detects** your AI framework from imports
+2. **Adds** `juvera_sdk` init, spans, and flush — progressively (Tier 1 → 2 → 3)
+3. **Validates** your instrumentation and flags missing pieces
+4. **Estimates** ROI against human-baseline benchmarks
+
+The plugin also includes an MCP server with `juvera_validate` and `juvera_roi` tools for programmatic access.
 
 ---
 
