@@ -38,7 +38,9 @@ When you write AI agent code, the plugin detects your framework and offers to ad
 The plugin activates automatically when it detects agent code, or use the slash command:
 
 ```
-/juvera:juvera-instrument    Instrument current file (progressive Tier 1→2→3)
+/juvera-instrument              Instrument current file (progressive Tier 1→2→3)
+/juvera-instrument validate     Check instrumentation correctness
+/juvera-instrument roi          Estimate ROI using workflow baselines
 ```
 
 The skill auto-detects your framework, adds `juvera_sdk` init/spans/flush, and validates the result.
