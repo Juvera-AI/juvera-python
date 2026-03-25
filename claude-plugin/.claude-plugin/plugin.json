@@ -1,0 +1,13 @@
+{
+  "name": "juvera",
+  "description": "Auto-instrument AI agent code with Juvera SDK for ROI tracking, trace capture, and business impact measurement. Detects OpenAI, Anthropic, LangChain, CrewAI, LlamaIndex, and raw HTTP LLM calls.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Juvera AI",
+    "email": "support@juvera.ai"
+  },
+  "homepage": "https://github.com/Juvera-AI/juvera-python",
+  "repository": "https://github.com/Juvera-AI/juvera-python",
+  "license": "Apache-2.0",
+  "keywords": ["juvera", "ai-agents", "roi", "instrumentation", "observability", "opentelemetry"]
+}
