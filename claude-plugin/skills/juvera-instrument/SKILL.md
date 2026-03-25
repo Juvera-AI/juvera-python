@@ -127,8 +127,9 @@ After instrumentation is complete, use the `juvera_validate` MCP tool to check t
 4. **Progressive, not pushy** — offer each tier once, don't nag
 5. **Adapt to existing code** — don't restructure the user's code, wrap around it
 6. **If MCP tools are unavailable**, the skill still works — use the patterns above directly
-7. **Multiple frameworks** — if code uses multiple LLM frameworks (e.g., OpenAI + LangChain), ask which is the primary agent. Create separate `agent_span()` blocks for each distinct LLM call site.
-8. **Async code** — `agent_span()` is a sync context manager. It works inside async functions but wrap only the synchronous LLM call section. For async FastAPI routes, place `agent_span()` around the `await` call to the LLM.
+7. **No framework detected** — if no framework is recognized, ask the user "What framework are you using?" and fall back to manual instrumentation with generic `agent_span()` wrapping
+8. **Multiple frameworks** — if code uses multiple LLM frameworks (e.g., OpenAI + LangChain), ask which is the primary agent. Create separate `agent_span()` blocks for each distinct LLM call site.
+9. **Async code** — `agent_span()` is a sync context manager. It works inside async functions but wrap only the synchronous LLM call section. For async FastAPI routes, place `agent_span()` around the `await` call to the LLM.
 
 ## Workflow Baselines Reference
 

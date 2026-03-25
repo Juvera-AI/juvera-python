@@ -180,7 +180,7 @@ def _tier3_snippet() -> str:
     """Return Tier 3 additions."""
     return '''    # Tier 3: Full observability
     span.add_context_source("knowledge_base", doc_type="pdf", token_count=800)
-    j.record_event("guardrail_check", properties={"rule": "pii_filter"})
+    j.record_event("guardrail_check", status="success", properties={"rule": "pii_filter"})
     roi = j.estimate_roi(agent_cost_usd=0.002)  # workflow_type inferred from active span
 
     # Error handling
