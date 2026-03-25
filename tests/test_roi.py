@@ -76,6 +76,30 @@ def test_estimate_roi_custom_baselines(mock_exporter):
     j.shutdown()
 
 
+def test_estimate_roi_auto_cost_from_span(sdk_init):
+    """When agent_cost_usd is omitted and model+tokens are set, cost is auto-computed."""
+    with j.agent_span(agent_id="a1", work_item_id="wi_001",
+                       workflow_type="ticket_deflection") as span:
+        span.set_model("gpt-4o-mini", provider="openai")
+        span.set_tokens(input=420, output=180)
+        roi = j.estimate_roi()
+    # gpt-4o-mini: 420 * 0.15/1M + 180 * 0.60/1M = 0.000063 + 0.000108 = 0.000171
+    assert roi["agent_cost_usd"] == 0.0002  # rounded to 4 decimals
+    assert roi["estimated_savings_usd"] == 22.0  # 22.0 - 0.0002 rounds to 22.0
+    assert roi["workflow_type"] == "ticket_deflection"
+
+
+def test_estimate_roi_explicit_overrides_auto(sdk_init):
+    """Explicit agent_cost_usd takes precedence over auto-computed cost."""
+    with j.agent_span(agent_id="a1", work_item_id="wi_001",
+                       workflow_type="ticket_deflection") as span:
+        span.set_model("gpt-4o-mini", provider="openai")
+        span.set_tokens(input=420, output=180)
+        roi = j.estimate_roi(agent_cost_usd=5.0)
+    assert roi["agent_cost_usd"] == 5.0
+    assert roi["estimated_savings_usd"] == 17.0
+
+
 def test_estimate_roi_from_set_work_item(sdk_init):
     j.set_work_item("wi_002", workflow_type="lead_qualification")
     with j.agent_span(agent_id="a1"):

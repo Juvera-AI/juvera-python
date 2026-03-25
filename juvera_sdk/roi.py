@@ -4,6 +4,10 @@ import warnings
 from typing import Any
 
 
+from opentelemetry import trace as _trace
+from juvera_sdk.costs import compute_token_cost_usd
+
+
 WORKFLOW_BASELINES: dict[str, dict[str, float]] = {
     "ticket_deflection":  {"human_cost_usd": 22.0,  "human_time_minutes": 15},
     "lead_qualification": {"human_cost_usd": 35.0,  "human_time_minutes": 25},
@@ -13,6 +17,26 @@ WORKFLOW_BASELINES: dict[str, dict[str, float]] = {
     "compliance_check":   {"human_cost_usd": 120.0, "human_time_minutes": 60},
     "content_generation": {"human_cost_usd": 50.0,  "human_time_minutes": 30},
 }
+
+
+def _auto_compute_agent_cost() -> float:
+    """Read model + tokens from the current span and compute cost.
+
+    Returns 0.0 if no active span or missing attributes.
+    """
+    span = _trace.get_current_span()
+    if not span.is_recording():
+        return 0.0
+    # ReadableSpan isn't available yet (span still recording), but the
+    # underlying Span object exposes attributes via the private _attributes dict.
+    # We access via the public API where possible.
+    attrs = getattr(span, "_attributes", None) or {}
+    model = attrs.get("gen_ai.request.model")
+    input_tokens = attrs.get("gen_ai.usage.input_tokens", 0)
+    output_tokens = attrs.get("gen_ai.usage.output_tokens", 0)
+    if model and (input_tokens or output_tokens):
+        return compute_token_cost_usd(model, int(input_tokens), int(output_tokens))
+    return 0.0
 
 
 def estimate_roi(
@@ -55,7 +79,12 @@ def estimate_roi(
 
     baseline_cost = baseline["human_cost_usd"]
     baseline_time = baseline["human_time_minutes"]
-    cost = agent_cost_usd if agent_cost_usd is not None else 0.0
+
+    # Auto-compute agent cost from current span's model + tokens if not provided
+    if agent_cost_usd is None:
+        cost = _auto_compute_agent_cost()
+    else:
+        cost = agent_cost_usd
     savings = baseline_cost - cost
     time_saved = baseline_time * (savings / baseline_cost) if baseline_cost > 0 else 0.0
 
