@@ -52,9 +52,15 @@ from juvera_sdk.context import set_work_item, clear_work_item  # noqa: E402
 from juvera_sdk.events import record_event       # noqa: E402
 from juvera_sdk.roi import estimate_roi          # noqa: E402
 
+def get_plugin_path() -> str:
+    """Return path to the Claude Code plugin directory."""
+    import os
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "claude-plugin")
+
+
 __all__ = [
     "__version__", "init", "agent_span", "record_impact_signal",
     "record_handoff", "record_event", "estimate_roi",
     "set_work_item", "clear_work_item",
-    "flush", "shutdown",
+    "flush", "shutdown", "get_plugin_path",
 ]

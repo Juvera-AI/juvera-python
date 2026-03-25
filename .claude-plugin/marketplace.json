@@ -1,0 +1,21 @@
+{
+  "name": "juvera-plugins",
+  "owner": {
+    "name": "Juvera AI",
+    "email": "support@juvera.ai"
+  },
+  "metadata": {
+    "description": "Official Juvera AI plugins for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "juvera",
+      "source": "./claude-plugin",
+      "description": "Auto-instrument AI agent code with Juvera SDK for ROI tracking",
+      "version": "0.1.0",
+      "category": "observability",
+      "tags": ["ai-agents", "roi", "instrumentation", "opentelemetry"]
+    }
+  ]
+}

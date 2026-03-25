@@ -26,6 +26,9 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["juvera_sdk*"]
 
+[tool.setuptools.package-data]
+"*" = ["claude-plugin/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"

@@ -4,6 +4,21 @@ Auto-instrument your AI agents with [Juvera SDK](https://pypi.org/project/juvera
 
 ## Install
 
+### Marketplace (recommended)
+
+```bash
+/plugin marketplace add Juvera-AI/juvera-python
+/plugin install juvera@juvera-plugins
+```
+
+### Git URL
+
+```bash
+claude plugin add https://github.com/Juvera-AI/juvera-python/tree/main/claude-plugin
+```
+
+### Local
+
 ```bash
 pip install juvera-sdk
 claude plugin add /path/to/claude-plugin

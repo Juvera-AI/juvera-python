@@ -44,6 +44,20 @@ j.flush()
 
 ---
 
+## Claude Code Plugin
+
+The SDK ships with a [Claude Code plugin](claude-plugin/) that auto-detects your AI framework (OpenAI, Anthropic, LangChain, etc.) and instruments it with Juvera for ROI tracking.
+
+```bash
+# Install via marketplace (recommended)
+/plugin marketplace add Juvera-AI/juvera-python
+/plugin install juvera@juvera-plugins
+```
+
+Then use `/juvera` to instrument, validate, and estimate ROI directly from Claude Code.
+
+---
+
 ## Core concepts
 
 ### `agent_span` — one unit of work
