@@ -20,6 +20,7 @@ from juvera_sdk.costs import estimate_token_cost_usd, resolve_model_pricing
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4318
 DEFAULT_INGEST_ENDPOINT = "http://localhost:8001"
+DEFAULT_API_BASE_URL = "http://localhost:8000"
 
 
 def _now_iso() -> str:
@@ -273,6 +274,7 @@ def inspect_trace_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         bool(attrs.get("juvera.work_item_id")) and not bool(attrs.get("juvera.work_item_auto_generated"))
         for attrs in flat_attrs
     )
+    environment = next((str(attrs.get("juvera.environment")).lower() for attrs in flat_attrs if attrs.get("juvera.environment")), None)
     subject_key = any(bool(attrs.get("juvera.properties.subject_key")) for attrs in flat_attrs)
     experiment_tags = any(bool(attrs.get("juvera.properties.experiment_id")) for attrs in flat_attrs)
     cost_health = _collect_cost_health(flat_attrs)
@@ -289,6 +291,7 @@ def inspect_trace_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
             "subject_key": subject_key,
             "experiment_tags": experiment_tags,
         },
+        "environment": environment or "local",
         **cost_health,
     }
 
@@ -298,6 +301,9 @@ def enrich_trace_envelope(envelope: dict[str, Any], session_id: str) -> tuple[di
     source_mode = metadata["sourceMode"]
     readiness = metadata["instrumentationReadiness"]
     for resource_span in envelope.get("resourceSpans") or []:
+        resource = resource_span.setdefault("resource", {})
+        resource_attrs = resource.setdefault("attributes", [])
+        _upsert_attr(resource_attrs, "juvera.environment", metadata.get("environment") or "local")
         for scope_span in resource_span.get("scopeSpans") or []:
             for span in scope_span.get("spans") or []:
                 attrs = span.setdefault("attributes", [])
@@ -310,6 +316,9 @@ def enrich_trace_envelope(envelope: dict[str, Any], session_id: str) -> tuple[di
 
 def build_proxy_trace_envelope(
     *,
+    agent_id: str,
+    workflow_type: str,
+    environment: str,
     provider: str,
     request_json: dict[str, Any] | None,
     response_json: dict[str, Any] | None,
@@ -360,6 +369,7 @@ def build_proxy_trace_envelope(
                     "attributes": [
                         {"key": "service.name", "value": _otel_value("juvera-local-relay")},
                         {"key": "juvera.sdk_version", "value": _otel_value("relay")},
+                        {"key": "juvera.environment", "value": _otel_value(environment)},
                     ]
                 },
                 "scopeSpans": [
@@ -373,9 +383,10 @@ def build_proxy_trace_envelope(
                                 "startTimeUnixNano": str(start_ns),
                                 "endTimeUnixNano": str(end_ns),
                                 "attributes": [
-                                    {"key": "juvera.agent_id", "value": _otel_value("local_proxy_capture")},
-                                    {"key": "juvera.workflow_type", "value": _otel_value("llm_proxy_test")},
+                                    {"key": "juvera.agent_id", "value": _otel_value(agent_id)},
+                                    {"key": "juvera.workflow_type", "value": _otel_value(workflow_type)},
                                     {"key": "juvera.domain", "value": _otel_value("custom")},
+                                    {"key": "juvera.environment", "value": _otel_value(environment)},
                                     {"key": "juvera.work_item_id", "value": _otel_value(work_item_id)},
                                     {"key": "juvera.capture_source", "value": _otel_value("proxy")},
                                     {"key": "juvera.instrumentation_readiness", "value": _otel_value("provisional")},
@@ -429,6 +440,8 @@ class RelayRuntimeState:
     traces_forwarded: int = 0
     impacts_forwarded: int = 0
     proxy_captures: int = 0
+    last_episode_href: str | None = None
+    last_episode_url_printed: bool = False
     last_error: str | None = None
     last_validation: dict[str, Any] = field(default_factory=dict)
     project_context: dict[str, Any] = field(default_factory=dict)
@@ -456,6 +469,7 @@ class RelayRuntimeState:
                     "impactsForwarded": self.impacts_forwarded,
                     "proxyCaptures": self.proxy_captures,
                 },
+                "latestEpisodeHref": self.last_episode_href,
                 "lastValidation": self.last_validation,
                 "projectContext": self.project_context,
                 "suggestedUpgrade": suggested_upgrade,
@@ -496,12 +510,30 @@ class RelayRuntimeState:
 
 
 class RelayConfig:
-    def __init__(self, host: str, port: int, ingest_endpoint: str, api_key: str | None, org_id: str | None):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        ingest_endpoint: str,
+        api_key: str | None,
+        org_id: str | None,
+        *,
+        api_base_url: str = DEFAULT_API_BASE_URL,
+        setup_token: str | None = None,
+        environment: str = "local",
+    ):
         self.host = host
         self.port = port
         self.ingest_endpoint = ingest_endpoint.rstrip("/")
+        self.api_base_url = api_base_url.rstrip("/")
         self.api_key = api_key
         self.org_id = org_id
+        self.setup_token = setup_token
+        self.environment = environment
+        self.setup_agent_id: str | None = None
+        self.setup_session_id: str | None = None
+        self.app_base_url: str | None = None
+        self.workflow_type: str = "llm_proxy_test"
         self.state = RelayRuntimeState()
         self.state.project_context = detect_project_context()
 
@@ -537,13 +569,76 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any] | None:
         return None
 
 
+def _ingest_headers(config: RelayConfig) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if config.setup_token:
+        headers["X-Setup-Token"] = config.setup_token
+    elif config.api_key:
+        headers["X-API-Key"] = config.api_key
+    return headers
+
+
+def _bootstrap_setup_context(config: RelayConfig) -> None:
+    if not config.setup_token:
+        return
+    response = httpx.post(
+        f"{config.api_base_url}/setup/bootstrap",
+        json={"setupToken": config.setup_token},
+        timeout=10.0,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    config.org_id = payload.get("orgId") or config.org_id
+    config.setup_agent_id = payload.get("agentId")
+    config.setup_session_id = payload.get("sessionId")
+    config.app_base_url = payload.get("appBaseUrl")
+    config.environment = payload.get("environment") or config.environment
+
+
+def _poll_setup_status(config: RelayConfig) -> dict[str, Any] | None:
+    if not config.setup_token:
+        return None
+    response = httpx.get(
+        f"{config.api_base_url}/setup/bootstrap/status",
+        headers={"X-Setup-Token": config.setup_token},
+        timeout=10.0,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _launch_episode_url_poll(config: RelayConfig) -> None:
+    if not config.setup_token or config.state.last_episode_url_printed:
+        return
+
+    def _poll() -> None:
+        deadline = time.time() + 30.0
+        while time.time() < deadline and not config.state.last_episode_url_printed:
+            try:
+                payload = _poll_setup_status(config) or {}
+            except Exception as exc:
+                config.state.record_error(f"setup status poll failed: {exc}")
+                time.sleep(1.5)
+                continue
+            latest_href = payload.get("latestEpisodeHref") or (payload.get("firstValueState") or {}).get("firstEpisodeHref")
+            if latest_href:
+                config.state.last_episode_href = str(latest_href)
+                app_base = payload.get("appBaseUrl") or config.app_base_url or "http://localhost:3000"
+                print(f"[juvera] View your trace at: {app_base.rstrip('/')}{latest_href}")
+                config.state.last_episode_url_printed = True
+                return
+            time.sleep(1.5)
+
+    threading.Thread(target=_poll, daemon=True).start()
+
+
 def _forward_to_ingest(config: RelayConfig, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    if not config.api_key:
-        return 202, {"accepted": False, "detail": "Relay captured traffic locally, but JUVERA_API_KEY is not set so nothing was forwarded."}
+    if not config.api_key and not config.setup_token:
+        return 202, {"accepted": False, "detail": "Relay captured traffic locally, but JUVERA_API_KEY or JUVERA_SETUP_TOKEN is not set so nothing was forwarded."}
     response = httpx.post(
         f"{config.ingest_endpoint}{path}",
         json=payload,
-        headers={"X-API-Key": config.api_key, "Content-Type": "application/json"},
+        headers=_ingest_headers(config),
         timeout=10.0,
     )
     response.raise_for_status()
@@ -586,6 +681,9 @@ def _proxy_request(handler: BaseHTTPRequestHandler, provider: str, target_base: 
 
     try:
         envelope, metadata = build_proxy_trace_envelope(
+            agent_id=config.setup_agent_id or "local_proxy_capture",
+            workflow_type=config.workflow_type,
+            environment=config.environment,
             provider=provider,
             request_json=request_json,
             response_json=response_json,
@@ -594,6 +692,7 @@ def _proxy_request(handler: BaseHTTPRequestHandler, provider: str, target_base: 
         )
         _forward_to_ingest(config, "/v1/traces", envelope)
         config.state.record_provider(provider, metadata)
+        _launch_episode_url_poll(config)
     except Exception as exc:
         config.state.record_error(f"proxy capture failed: {exc}")
 
@@ -641,6 +740,7 @@ def build_handler(config: RelayConfig):
                     enriched, metadata = enrich_trace_envelope(payload, config.state.session_id)
                     status, response_body = _forward_to_ingest(config, "/v1/traces", enriched)
                     config.state.record_trace(metadata)
+                    _launch_episode_url_poll(config)
                     _send_json(self, status, response_body)
                 except Exception as exc:
                     config.state.record_error(str(exc))
@@ -681,12 +781,23 @@ def run_listen(args: argparse.Namespace) -> int:
         ingest_endpoint=args.ingest_endpoint,
         api_key=args.api_key,
         org_id=args.org_id,
+        api_base_url=args.api_base_url,
+        setup_token=args.setup_token,
+        environment=args.environment,
     )
+    if config.setup_token:
+        try:
+            _bootstrap_setup_context(config)
+        except Exception as exc:
+            print(f"[juvera] Setup bootstrap failed: {exc}")
+            return 1
     server = ThreadingHTTPServer((args.host, args.port), build_handler(config))
     print(f"[juvera] Local Relay listening on http://{args.host}:{args.port}")
     print(f"[juvera] Status endpoint: http://{args.host}:{args.port}/status")
     print(f"[juvera] Proxy OpenAI via http://{args.host}:{args.port}/proxy/openai/v1")
     print(f"[juvera] Proxy Anthropic via http://{args.host}:{args.port}/proxy/anthropic/v1")
+    if config.app_base_url:
+        print(f"[juvera] Juvera app: {config.app_base_url}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -23,7 +23,7 @@ def setup_provider(config: JuveraConfig, _exporter=None) -> TracerProvider:
         "juvera.org_id": config.org_id,
         "juvera.domain": config.domain or "",
         "juvera.agent_id": config.agent_id or "",
-        "juvera.environment": "production" if not config.debug else "dev",
+        "juvera.environment": config.environment or ("dev" if config.debug else "prod"),
         "juvera.sdk_version": _get_version(),
     })
 

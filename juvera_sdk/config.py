@@ -12,6 +12,7 @@ class JuveraConfig:
     service_name: str = "juvera-agent"
     domain: str | None = None
     agent_id: str | None = None
+    environment: str = "prod"
     debug: bool = False
     human_reviewer_cost_per_hour_usd: float = 50.0
     workflow_baselines: dict | None = None
@@ -36,6 +37,7 @@ class JuveraConfig:
             service_name=overrides.get("service_name") or os.environ.get("JUVERA_SERVICE_NAME", "juvera-agent"),
             domain=overrides.get("domain") or os.environ.get("JUVERA_DOMAIN"),
             agent_id=overrides.get("agent_id") or os.environ.get("JUVERA_AGENT_ID"),
+            environment=overrides.get("environment") or os.environ.get("JUVERA_ENVIRONMENT", "prod"),
             debug=overrides.get("debug", os.environ.get("JUVERA_DEBUG", "").lower() in ("1", "true")),
             human_reviewer_cost_per_hour_usd=overrides.get("human_reviewer_cost_per_hour_usd", 50.0),
             workflow_baselines=overrides.get("workflow_baselines"),

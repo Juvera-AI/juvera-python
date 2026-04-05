@@ -15,6 +15,7 @@ def init(
     service_name: str | None = None,
     domain: str | None = None,
     agent_id: str | None = None,
+    environment: str | None = None,
     debug: bool | None = None,
     workflow_baselines: dict | None = None,
     _exporter=None,   # test hook
@@ -23,13 +24,14 @@ def init(
 
     All parameters are optional — reads from env vars if not provided:
         JUVERA_API_KEY, JUVERA_ORG_ID, JUVERA_ENDPOINT, JUVERA_SERVICE_NAME,
-        JUVERA_DOMAIN, JUVERA_AGENT_ID, JUVERA_DEBUG
+        JUVERA_DOMAIN, JUVERA_AGENT_ID, JUVERA_ENVIRONMENT, JUVERA_DEBUG
     """
     global _config
     overrides = {
         k: v for k, v in {
             "api_key": api_key, "org_id": org_id, "endpoint": endpoint,
             "service_name": service_name, "domain": domain, "agent_id": agent_id,
+            "environment": environment,
             "debug": debug, "workflow_baselines": workflow_baselines,
         }.items() if v is not None
     }

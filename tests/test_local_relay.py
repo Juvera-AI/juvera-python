@@ -56,6 +56,9 @@ def test_enrich_trace_envelope_adds_capture_metadata():
 
 def test_build_proxy_trace_envelope_is_always_provisional():
     envelope, metadata = build_proxy_trace_envelope(
+        agent_id="local_proxy_capture",
+        workflow_type="llm_proxy_test",
+        environment="local",
         provider="openai",
         request_json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]},
         response_json={
@@ -70,6 +73,7 @@ def test_build_proxy_trace_envelope_is_always_provisional():
     values = {item["key"]: item["value"] for item in attrs}
     assert values["juvera.capture_source"]["stringValue"] == "proxy"
     assert values["juvera.instrumentation_readiness"]["stringValue"] == "provisional"
+    assert values["juvera.environment"]["stringValue"] == "local"
     assert metadata["requiredFields"]["work_item_id"] is False
     assert metadata["providerDetected"] is True
     assert metadata["modelDetected"] is True

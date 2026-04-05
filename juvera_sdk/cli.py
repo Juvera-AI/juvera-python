@@ -23,8 +23,11 @@ def main() -> int:
     listen.add_argument("--host", default=DEFAULT_HOST)
     listen.add_argument("--port", type=int, default=DEFAULT_PORT)
     listen.add_argument("--ingest-endpoint", default=os.getenv("JUVERA_INGEST_ENDPOINT", DEFAULT_INGEST_ENDPOINT))
+    listen.add_argument("--api-base-url", default=os.getenv("JUVERA_API_BASE_URL", "http://localhost:8000"))
     listen.add_argument("--api-key", default=os.getenv("JUVERA_API_KEY"))
     listen.add_argument("--org-id", default=os.getenv("JUVERA_ORG_ID"))
+    listen.add_argument("--setup-token", default=os.getenv("JUVERA_SETUP_TOKEN"))
+    listen.add_argument("--environment", default=os.getenv("JUVERA_ENVIRONMENT", "local"))
     listen.set_defaults(func=run_listen)
 
     doctor = subparsers.add_parser("doctor", help="Check relay health and optionally probe common local dev ports.")
