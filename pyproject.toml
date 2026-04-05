@@ -16,6 +16,9 @@ dependencies = [
   "jsonschema>=4.0,<5.0",
 ]
 
+[project.scripts]
+juvera = "juvera_sdk.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",

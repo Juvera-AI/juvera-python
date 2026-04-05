@@ -44,6 +44,56 @@ j.flush()
 
 ---
 
+## Juvera Local Relay
+
+For onboarding, Juvera can now sit in front of your app on loopback and prove it sees real traffic before your instrumentation is perfect.
+
+### Start the relay
+
+```bash
+juvera listen --api-key "$JUVERA_API_KEY" --org-id "$JUVERA_ORG_ID"
+```
+
+The relay exposes:
+
+- `http://127.0.0.1:4318/v1/traces` for SDK or OTel attach mode
+- `http://127.0.0.1:4318/proxy/openai/v1` for OpenAI smoke-test capture
+- `http://127.0.0.1:4318/proxy/anthropic/v1` for Anthropic smoke-test capture
+- `http://127.0.0.1:4318/status` for setup validation
+
+### Proxy mode
+
+No code changes required if your client supports a base URL override:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:4318/proxy/openai/v1
+export ANTHROPIC_BASE_URL=http://127.0.0.1:4318/proxy/anthropic/v1
+```
+
+Proxy mode creates **provisional** episodes so you can validate that Juvera sees traffic. Upgrade to SDK or attach mode for attribution and experiments.
+
+### SDK mode through the relay
+
+```python
+j.init(
+    api_key="jvr_...",
+    org_id="org_acme",
+    endpoint="http://127.0.0.1:4318",
+    domain="support",
+)
+```
+
+### Validate your setup
+
+```bash
+juvera doctor --scan-ports
+juvera validate
+```
+
+`juvera validate` checks whether your latest traffic includes the fields Juvera needs for attribution readiness, such as `agent_id`, `workflow_type`, and `work_item_id`.
+
+---
+
 ## Claude Code Plugin
 
 The SDK ships with a [Claude Code plugin](claude-plugin/) that auto-detects your AI framework (OpenAI, Anthropic, LangChain, CrewAI, LlamaIndex) and instruments it with Juvera — no manual setup needed.

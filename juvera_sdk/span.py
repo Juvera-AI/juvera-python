@@ -66,6 +66,43 @@ class AgentSpan:
     def set_attribute(self, key: str, value) -> None:
         self._span.set_attribute(key, value)
 
+    def set_experiment(
+        self,
+        experiment_id: str,
+        variant_id: str,
+        *,
+        variant_label: str | None = None,
+        prompt_version: str | None = None,
+        release_label: str | None = None,
+        assignment_mode: str | None = None,
+        subject_key: str | None = None,
+        assignment_reason: str | None = None,
+        assignment_timestamp: str | None = None,
+        exposure_event: str | None = None,
+        config_ref: str | None = None,
+        experiment_name: str | None = None,
+        is_control: bool | None = None,
+    ) -> None:
+        metadata = {
+            "experiment_id": experiment_id,
+            "variant_id": variant_id,
+            "variant_label": variant_label,
+            "prompt_version": prompt_version,
+            "release_label": release_label,
+            "assignment_mode": assignment_mode,
+            "subject_key": subject_key,
+            "assignment_reason": assignment_reason,
+            "assignment_timestamp": assignment_timestamp,
+            "exposure_event": exposure_event,
+            "config_ref": config_ref,
+            "experiment_name": experiment_name,
+            "is_control": str(is_control).lower() if is_control is not None else None,
+        }
+        for key, value in metadata.items():
+            if value is None:
+                continue
+            self._span.set_attribute(f"juvera.properties.{key}", value)
+
 
 @contextmanager
 def agent_span(

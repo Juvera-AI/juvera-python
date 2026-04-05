@@ -63,3 +63,28 @@ def test_agent_span_generates_work_item_id_if_omitted(sdk_init):
     attrs = exporter.last_span().attributes
     assert attrs.get("juvera.work_item_id") is not None
     assert len(attrs["juvera.work_item_id"]) > 8
+
+
+def test_agent_span_set_experiment_metadata(sdk_init):
+    exporter = sdk_init
+    with j.agent_span(agent_id="agent_01", work_item_id="wi_exp_001") as span:
+        span.set_experiment(
+            experiment_id="exp_support_routing_v3",
+            variant_id="treatment",
+            variant_label="Treatment",
+            subject_key="acct_123",
+            assignment_mode="external_tagging",
+            exposure_event="agent.run",
+            assignment_reason="router_decision",
+            config_ref="prompt_v3",
+            is_control=False,
+        )
+
+    attrs = exporter.last_span().attributes
+    assert attrs["juvera.properties.experiment_id"] == "exp_support_routing_v3"
+    assert attrs["juvera.properties.variant_id"] == "treatment"
+    assert attrs["juvera.properties.variant_label"] == "Treatment"
+    assert attrs["juvera.properties.subject_key"] == "acct_123"
+    assert attrs["juvera.properties.assignment_mode"] == "external_tagging"
+    assert attrs["juvera.properties.exposure_event"] == "agent.run"
+    assert attrs["juvera.properties.is_control"] == "false"
