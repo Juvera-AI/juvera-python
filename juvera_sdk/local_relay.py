@@ -10,10 +10,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from juvera_sdk.costs import estimate_token_cost_usd, resolve_model_pricing
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4318
@@ -58,6 +60,205 @@ def _upsert_attr(attrs: list[dict[str, Any]], key: str, value: Any) -> None:
     attrs.append({"key": key, "value": _otel_value(value)})
 
 
+def detect_project_context(cwd: str | None = None) -> dict[str, Any]:
+    base = Path(cwd or ".").resolve()
+    candidate_files = [
+        "pyproject.toml",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "poetry.lock",
+        "Pipfile",
+    ]
+    corpus: list[str] = []
+    files_seen: list[str] = []
+    for rel_path in candidate_files:
+        path = base / rel_path
+        if not path.is_file():
+            continue
+        try:
+            corpus.append(path.read_text())
+            files_seen.append(rel_path)
+        except OSError:
+            continue
+
+    joined = "\n".join(corpus).lower()
+    indicators = {
+        "openai_agents": ("openai-agents", "agents"),
+        "langgraph": ("langgraph",),
+        "langchain": ("langchain",),
+        "crewai": ("crewai",),
+        "autogen": ("pyautogen", "autogen"),
+        "openai": ("openai",),
+        "anthropic": ("anthropic",),
+    }
+    frameworks = [name for name, tokens in indicators.items() if any(token in joined for token in tokens)]
+    return {
+        "cwd": str(base),
+        "filesScanned": files_seen,
+        "frameworks": frameworks,
+    }
+
+
+def _preferred_framework(project_context: dict[str, Any], providers: list[str], frameworks: list[str]) -> str:
+    candidates = set(project_context.get("frameworks") or []) | set(providers) | set(frameworks)
+    for name in ("openai_agents", "langgraph", "langchain", "crewai", "autogen", "openai", "anthropic"):
+        if name in candidates:
+            return name
+    return "sdk"
+
+
+def _build_upgrade_plan(
+    *,
+    project_context: dict[str, Any],
+    providers: list[str],
+    frameworks: list[str],
+    relay_base_url: str = "http://127.0.0.1:4318",
+) -> dict[str, Any]:
+    framework = _preferred_framework(project_context, providers, frameworks)
+    if framework == "openai_agents":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[openai-agents]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                'j.instrument_openai_agents(default_workflow_type="support_ticket_resolution")\n'
+            ),
+        }
+    if framework == "langgraph":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[langgraph]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                "j.instrument_langgraph()\n\n"
+                'with j.workflow(work_item_id=ticket_id, workflow_type="support_ticket_resolution", agent_id="support_agent"):\n'
+                "    graph.invoke(payload)\n"
+            ),
+        }
+    if framework == "langchain":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[langchain]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                "j.instrument_langchain()\n\n"
+                'with j.workflow(work_item_id=ticket_id, workflow_type="support_ticket_resolution", agent_id="support_agent"):\n'
+                "    chain.invoke(payload)\n"
+            ),
+        }
+    if framework == "crewai":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[crewai]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                'j.instrument_crewai(default_workflow_type="support_ticket_resolution")\n'
+            ),
+        }
+    if framework == "autogen":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[autogen]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                'j.instrument_autogen(default_workflow_type="support_ticket_resolution")\n'
+            ),
+        }
+    if framework == "anthropic":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[anthropic]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n"
+                "from anthropic import Anthropic\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                'client = j.wrap_anthropic(Anthropic(), agent_id="support_agent", default_workflow_type="support_ticket_resolution")\n\n'
+                'with j.workflow(work_item_id=ticket_id, workflow_type="support_ticket_resolution"):\n'
+                "    client.messages.create(model=model, messages=messages)\n"
+            ),
+        }
+    if framework == "openai":
+        return {
+            "framework": framework,
+            "installCommand": 'pip install "juvera-sdk[openai]"',
+            "upgradeFrom": "proxy",
+            "code": (
+                "import juvera_sdk as j\n"
+                "from openai import OpenAI\n\n"
+                f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+                'client = j.wrap_openai(OpenAI(), agent_id="support_agent", default_workflow_type="support_ticket_resolution")\n\n'
+                'with j.workflow(work_item_id=ticket_id, workflow_type="support_ticket_resolution"):\n'
+                "    client.chat.completions.create(model=model, messages=messages)\n"
+            ),
+        }
+    return {
+        "framework": "sdk",
+        "installCommand": 'pip install juvera-sdk',
+        "upgradeFrom": "proxy",
+        "code": (
+            "import juvera_sdk as j\n\n"
+            f'j.init(endpoint="{relay_base_url}", debug=False)\n'
+            'with j.workflow(work_item_id=ticket_id, workflow_type="support_ticket_resolution", agent_id="support_agent"):\n'
+            "    ...\n"
+        ),
+    }
+
+
+def _collect_cost_health(flat_attrs: list[dict[str, Any]]) -> dict[str, Any]:
+    providers = sorted({str(attrs.get("gen_ai.system")).lower() for attrs in flat_attrs if attrs.get("gen_ai.system")})
+    models = sorted({str(attrs.get("gen_ai.request.model")).lower() for attrs in flat_attrs if attrs.get("gen_ai.request.model")})
+    token_usage_detected = False
+    pricing_resolved = False
+    cost_computed = False
+    total_cost = 0.0
+    strategies: set[str] = set()
+
+    for attrs in flat_attrs:
+        model = attrs.get("gen_ai.request.model")
+        provider = attrs.get("gen_ai.system")
+        input_tokens_present = "gen_ai.usage.input_tokens" in attrs or "gen_ai.usage.prompt_tokens" in attrs
+        output_tokens_present = "gen_ai.usage.output_tokens" in attrs or "gen_ai.usage.completion_tokens" in attrs
+        input_tokens = int(attrs.get("gen_ai.usage.input_tokens") or attrs.get("gen_ai.usage.prompt_tokens") or 0)
+        output_tokens = int(attrs.get("gen_ai.usage.output_tokens") or attrs.get("gen_ai.usage.completion_tokens") or 0)
+        token_usage_detected = token_usage_detected or input_tokens_present or output_tokens_present
+        rates, _, strategy = resolve_model_pricing(model, provider=provider)
+        if rates is not None and (provider or model):
+            pricing_resolved = True
+        if input_tokens or output_tokens:
+            estimated_cost, strategy = estimate_token_cost_usd(
+                model=model,
+                provider=provider,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            total_cost += estimated_cost
+            cost_computed = cost_computed or estimated_cost > 0
+        strategies.add(strategy)
+
+    return {
+        "providerDetected": bool(providers),
+        "modelDetected": bool(models),
+        "tokenUsageDetected": token_usage_detected,
+        "pricingResolved": pricing_resolved,
+        "costComputed": cost_computed,
+        "estimatedCostUsd": round(total_cost, 6),
+        "pricingStrategies": sorted(strategy for strategy in strategies if strategy),
+        "detectedProviders": providers,
+        "detectedModels": models,
+    }
+
+
 def inspect_trace_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     spans = []
     for resource_span in envelope.get("resourceSpans") or []:
@@ -68,9 +269,13 @@ def inspect_trace_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     source_mode = "sdk" if has_juvera_attrs else "attach"
     agent_id = any(bool(attrs.get("juvera.agent_id")) for attrs in flat_attrs)
     workflow_type = any(bool(attrs.get("juvera.workflow_type")) for attrs in flat_attrs)
-    work_item_id = any(bool(attrs.get("juvera.work_item_id")) for attrs in flat_attrs)
+    work_item_id = any(
+        bool(attrs.get("juvera.work_item_id")) and not bool(attrs.get("juvera.work_item_auto_generated"))
+        for attrs in flat_attrs
+    )
     subject_key = any(bool(attrs.get("juvera.properties.subject_key")) for attrs in flat_attrs)
     experiment_tags = any(bool(attrs.get("juvera.properties.experiment_id")) for attrs in flat_attrs)
+    cost_health = _collect_cost_health(flat_attrs)
     readiness = "measurement_ready" if agent_id and workflow_type and work_item_id and subject_key and experiment_tags else (
         "attribution_ready" if agent_id and workflow_type and work_item_id else "provisional"
     )
@@ -84,6 +289,7 @@ def inspect_trace_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
             "subject_key": subject_key,
             "experiment_tags": experiment_tags,
         },
+        **cost_health,
     }
 
 
@@ -137,6 +343,12 @@ def build_proxy_trace_envelope(
         usage = response_json.get("usage") or {}
         input_tokens = int(usage.get("input_tokens") or 0)
         output_tokens = int(usage.get("output_tokens") or 0)
+    estimated_cost_usd, pricing_strategy = estimate_token_cost_usd(
+        model=model,
+        provider=provider,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 
     work_item_id = str(uuid.uuid4())
     start_ns = time.time_ns()
@@ -193,7 +405,15 @@ def build_proxy_trace_envelope(
             "subject_key": False,
             "experiment_tags": False,
         },
-        "provider": provider,
+        "providerDetected": bool(provider),
+        "modelDetected": model != "unknown",
+        "tokenUsageDetected": bool(input_tokens or output_tokens),
+        "pricingResolved": pricing_strategy != "missing",
+        "costComputed": estimated_cost_usd > 0,
+        "estimatedCostUsd": estimated_cost_usd,
+        "pricingStrategies": [pricing_strategy],
+        "detectedProviders": [provider],
+        "detectedModels": [model] if model != "unknown" else [],
     }
 
 
@@ -211,10 +431,17 @@ class RelayRuntimeState:
     proxy_captures: int = 0
     last_error: str | None = None
     last_validation: dict[str, Any] = field(default_factory=dict)
+    project_context: dict[str, Any] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
+            detected_frameworks = sorted(set(self.detected_frameworks) | set(self.project_context.get("frameworks") or []))
+            suggested_upgrade = _build_upgrade_plan(
+                project_context=self.project_context,
+                providers=sorted(self.detected_providers),
+                frameworks=detected_frameworks,
+            )
             return {
                 "status": "online",
                 "sessionId": self.session_id,
@@ -223,13 +450,15 @@ class RelayRuntimeState:
                 "proxyTrafficDetected": self.proxy_traffic_detected,
                 "sdkSpansDetected": self.sdk_spans_detected,
                 "detectedProviders": sorted(self.detected_providers),
-                "detectedFrameworks": sorted(self.detected_frameworks),
+                "detectedFrameworks": detected_frameworks,
                 "stats": {
                     "tracesForwarded": self.traces_forwarded,
                     "impactsForwarded": self.impacts_forwarded,
                     "proxyCaptures": self.proxy_captures,
                 },
                 "lastValidation": self.last_validation,
+                "projectContext": self.project_context,
+                "suggestedUpgrade": suggested_upgrade,
                 "lastError": self.last_error,
             }
 
@@ -243,6 +472,8 @@ class RelayRuntimeState:
             else:
                 self.sdk_spans_detected = True
                 self.detected_frameworks.add(metadata.get("sourceMode") or "sdk")
+            for provider in metadata.get("detectedProviders") or []:
+                self.detected_providers.add(str(provider))
             self.last_validation = metadata
 
     def record_provider(self, provider: str, metadata: dict[str, Any]) -> None:
@@ -251,7 +482,7 @@ class RelayRuntimeState:
             self.proxy_traffic_detected = True
             self.proxy_captures += 1
             self.detected_providers.add(provider)
-            self.detected_frameworks.add(f"{provider}_http")
+            self.detected_frameworks.add(provider)
             self.last_validation = metadata
 
     def record_impact(self) -> None:
@@ -272,6 +503,7 @@ class RelayConfig:
         self.api_key = api_key
         self.org_id = org_id
         self.state = RelayRuntimeState()
+        self.state.project_context = detect_project_context()
 
 
 def _copy_response_headers(source: httpx.Response, handler: BaseHTTPRequestHandler) -> None:
@@ -512,13 +744,49 @@ def run_validate(args: argparse.Namespace) -> int:
         if field in {"agent_id", "workflow_type", "work_item_id"} and not present:
             blocking.append(field)
 
-    readiness = payload.get("lastValidation", {}).get("instrumentationReadiness")
+    last_validation = payload.get("lastValidation", {})
+    print(f"[juvera] providerDetected: {'ok' if last_validation.get('providerDetected') else 'missing'}")
+    print(f"[juvera] modelDetected: {'ok' if last_validation.get('modelDetected') else 'missing'}")
+    print(f"[juvera] tokenUsageDetected: {'ok' if last_validation.get('tokenUsageDetected') else 'missing'}")
+    print(f"[juvera] pricingResolved: {'ok' if last_validation.get('pricingResolved') else 'missing'}")
+    print(f"[juvera] costComputed: {'ok' if last_validation.get('costComputed') else 'missing'}")
+    if last_validation.get("estimatedCostUsd") is not None:
+        print(f"[juvera] estimatedCostUsd: {last_validation.get('estimatedCostUsd')}")
+
+    readiness = last_validation.get("instrumentationReadiness")
     print(f"[juvera] instrumentationReadiness: {readiness}")
+    suggested_upgrade = payload.get("suggestedUpgrade") or {}
+    if suggested_upgrade.get("framework"):
+        print(f"[juvera] recommendedUpgrade: {suggested_upgrade['framework']}")
+    if last_validation.get("tokenUsageDetected") and not last_validation.get("costComputed"):
+        blocking.append("cost_health")
     return 1 if blocking else 0
 
 
 def run_patch(args: argparse.Namespace) -> int:
-    print("[juvera] `juvera patch` is a delegation command in v1.")
-    print("[juvera] Use the Claude plugin or your code assistant to add SDK spans, then point them at the Local Relay endpoint.")
-    return 0
+    project_context = detect_project_context(getattr(args, "cwd", None))
+    providers: list[str] = []
+    frameworks: list[str] = list(project_context.get("frameworks") or [])
+    base_url = getattr(args, "base_url", f"http://{DEFAULT_HOST}:{DEFAULT_PORT}").rstrip("/")
+    try:
+        response = httpx.get(f"{base_url}/status", timeout=2.0)
+        response.raise_for_status()
+        payload = response.json()
+        providers = payload.get("detectedProviders") or []
+        frameworks = sorted(set(frameworks) | set(payload.get("detectedFrameworks") or []))
+    except Exception:
+        payload = {}
 
+    plan = _build_upgrade_plan(
+        project_context=project_context,
+        providers=providers,
+        frameworks=frameworks,
+        relay_base_url=base_url,
+    )
+    print(f"[juvera] recommended framework: {plan['framework']}")
+    print(f"[juvera] install: {plan['installCommand']}")
+    print("[juvera] snippet:")
+    print(plan["code"])
+    if payload.get("lastValidation"):
+        print("[juvera] relay status included in recommendation.")
+    return 0

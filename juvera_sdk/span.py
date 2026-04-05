@@ -1,10 +1,13 @@
 # juvera_sdk/span.py
 from __future__ import annotations
+import importlib
+import json
 import uuid
 from contextlib import contextmanager
 from opentelemetry import trace
-from juvera_sdk import context as _ctx
 import juvera_sdk.tracer as _tracer
+
+_ctx = importlib.import_module("juvera_sdk.context")
 
 
 class AgentSpan:
@@ -13,6 +16,10 @@ class AgentSpan:
     def __init__(self, otel_span: trace.Span, work_item_id: str):
         self._span = otel_span
         self.work_item_id = work_item_id
+
+    def _set_capture_state(self, readiness: str) -> None:
+        self._span.set_attribute("juvera.instrumentation_readiness", readiness)
+        self._span.set_attribute("juvera.provisional", readiness == "provisional")
 
     def set_model(self, model: str, provider: str | None = None) -> None:
         self._span.set_attribute("gen_ai.request.model", model)
@@ -102,6 +109,9 @@ class AgentSpan:
             if value is None:
                 continue
             self._span.set_attribute(f"juvera.properties.{key}", value)
+        subject_key = subject_key or _ctx.get_subject_key()
+        if subject_key:
+            self._set_capture_state("measurement_ready")
 
 
 @contextmanager
@@ -116,23 +126,50 @@ def agent_span(
     from juvera_sdk import _get_config
     config = _get_config()
 
-    wid = work_item_id or _ctx.get_work_item_id() or str(uuid.uuid4())
-    eff_domain = domain or config.domain
+    context_work_item_id = _ctx.get_work_item_id()
+    explicit_work_item = bool(work_item_id or (_ctx.has_explicit_work_item() and context_work_item_id))
+    wid = work_item_id or context_work_item_id or str(uuid.uuid4())
+    eff_agent_id = agent_id or _ctx.get_agent_id() or config.agent_id
+    eff_domain = domain or _ctx.get_domain() or config.domain
     eff_workflow_type = workflow_type or _ctx.get_workflow_type()
+    eff_business_unit = business_unit or _ctx.get_business_unit()
+    subject_key = _ctx.get_subject_key()
+    readiness = "provisional"
+    if explicit_work_item and eff_workflow_type and eff_agent_id:
+        readiness = "attribution_ready"
 
     tracer = _tracer.get_tracer()
     with tracer.start_as_current_span("agent.run") as otel_span:
-        otel_span.set_attribute("juvera.agent_id", agent_id)
+        otel_span.set_attribute("juvera.agent_id", eff_agent_id)
         otel_span.set_attribute("juvera.work_item_id", wid)
+        otel_span.set_attribute("juvera.work_item_auto_generated", not explicit_work_item)
+        otel_span.set_attribute("juvera.capture_source", "sdk")
+        otel_span.set_attribute("juvera.instrumentation_readiness", readiness)
+        otel_span.set_attribute("juvera.provisional", readiness == "provisional")
         if eff_domain:
             otel_span.set_attribute("juvera.domain", eff_domain)
         if eff_workflow_type:
             otel_span.set_attribute("juvera.workflow_type", eff_workflow_type)
-        if business_unit:
-            otel_span.set_attribute("juvera.business_unit", business_unit)
+        if eff_business_unit:
+            otel_span.set_attribute("juvera.business_unit", eff_business_unit)
+        if subject_key:
+            otel_span.set_attribute("juvera.properties.subject_key", subject_key)
+        user_id = _ctx.get_user_id()
+        if user_id:
+            otel_span.set_attribute("juvera.user_id", user_id)
+        session_id = _ctx.get_session_id()
+        if session_id:
+            otel_span.set_attribute("juvera.session_id", session_id)
+        metadata = _ctx.get_context_metadata()
+        if metadata:
+            otel_span.set_attribute("juvera.context.metadata_json", json.dumps(metadata, sort_keys=True))
+        tags = _ctx.get_context_tags()
+        if tags:
+            otel_span.set_attribute("juvera.context.tags_json", json.dumps(tags))
 
         wid_token = _ctx._work_item_id.set(wid)
-        aid_token = _ctx._agent_id.set(agent_id)
+        wid_explicit_token = _ctx._work_item_explicit.set(explicit_work_item)
+        aid_token = _ctx._agent_id.set(eff_agent_id)
         wf_token = _ctx._workflow_type.set(eff_workflow_type)
         juvera_span = AgentSpan(otel_span, wid)
         span_token = _ctx.set_current_span(juvera_span)
@@ -141,5 +178,6 @@ def agent_span(
         finally:
             _ctx._current_span.set(None)
             _ctx._work_item_id.reset(wid_token)
+            _ctx._work_item_explicit.reset(wid_explicit_token)
             _ctx._agent_id.reset(aid_token)
             _ctx._workflow_type.reset(wf_token)

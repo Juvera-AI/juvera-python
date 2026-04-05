@@ -14,33 +14,52 @@ pip install juvera-sdk
 
 ## Quickstart
 
+### 1. Start proxy-first
+
+```bash
+juvera listen --api-key "$JUVERA_API_KEY" --org-id "$JUVERA_ORG_ID"
+export OPENAI_BASE_URL=http://127.0.0.1:4318/proxy/openai/v1
+export ANTHROPIC_BASE_URL=http://127.0.0.1:4318/proxy/anthropic/v1
+```
+
+Run your app normally, then validate what Juvera saw:
+
+```bash
+juvera validate
+juvera patch
+```
+
+### 2. Upgrade to workflow-first instrumentation
+
 ```python
 import juvera_sdk as j
+from openai import OpenAI
 
 j.init(
-    api_key="jvr_your_key",
-    org_id="org_your_org",
-    endpoint="local",        # prints locally, no network
+    endpoint="http://127.0.0.1:4318",
     domain="support",
 )
 
-with j.agent_span(agent_id="support_agent", work_item_id="wi_ZD98765",
-                   workflow_type="ticket_deflection") as span:
-    span.set_prompt("What is the refund policy?")
-    span.set_model("gpt-4o-mini", provider="openai")
-    span.set_tokens(input=420, output=180)
-    span.add_tool_call("lookup_crm", duration_ms=45)
-    span.add_context_source("policy_doc", doc_type="pdf", token_count=800)
-    span.set_completion("Our refund policy allows returns within 30 days.")
+client = j.wrap_openai(
+    OpenAI(),
+    agent_id="support_agent",
+    default_workflow_type="ticket_deflection",
+)
 
-    j.record_event("guardrail_check", status="success")
-    roi = j.estimate_roi(agent_cost_usd=0.0017)
-    # {'estimated_savings_usd': 22.0, 'baseline_cost_usd': 22.0, ...}
+with j.workflow(
+    work_item_id="wi_ZD98765",
+    workflow_type="ticket_deflection",
+    agent_id="support_agent",
+):
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": "What is the refund policy?"}],
+    )
 
 j.flush()
 ```
 
-`endpoint="local"` prints everything to stdout with no network calls. Switch to your Juvera gateway URL when ready for production.
+`j.workflow(...)` is the preferred top-level API. It keeps the episode story consistent while wrappers and framework instrumentors fill in prompt, completion, model, provider, and tokens automatically.
 
 ### Less boilerplate with decorators
 
@@ -76,6 +95,16 @@ Built-in decorators:
 - `@j.anthropic_agent(...)` does the same for Anthropic Messages responses
 - `@j.instrument(...)` is the provider-agnostic escape hatch when you want a custom parser
 
+### Workflow and context helpers
+
+```python
+with j.context(user_id="u_123", session_id="sess_abc", subject_key="customer_42"):
+    with j.workflow(work_item_id="wi_ZD98765", workflow_type="ticket_deflection", agent_id="support_agent"):
+        ...
+```
+
+You can also set long-lived request context with `j.set_context(...)` / `j.clear_context()`.
+
 ---
 
 ## Juvera Local Relay
@@ -110,8 +139,6 @@ Proxy mode creates **provisional** episodes so you can validate that Juvera sees
 
 ```python
 j.init(
-    api_key="jvr_...",
-    org_id="org_acme",
     endpoint="http://127.0.0.1:4318",
     domain="support",
 )
@@ -124,7 +151,9 @@ juvera doctor --scan-ports
 juvera validate
 ```
 
-`juvera validate` checks whether your latest traffic includes the fields Juvera needs for attribution readiness, such as `agent_id`, `workflow_type`, and `work_item_id`.
+`juvera validate` checks whether your latest traffic includes the fields Juvera needs for attribution readiness and spend attribution: `agent_id`, `workflow_type`, `work_item_id`, provider/model detection, token capture, pricing resolution, and cost computation.
+
+`juvera patch` reads the current repo, detects common frameworks, and prints the recommended `wrap_*()` or `instrument_*()` upgrade snippet.
 
 ---
 

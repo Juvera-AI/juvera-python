@@ -1,7 +1,9 @@
 # juvera_sdk/handoff.py
 from __future__ import annotations
+import importlib
 import juvera_sdk.tracer as _tracer
-from juvera_sdk import context as _ctx
+
+_ctx = importlib.import_module("juvera_sdk.context")
 
 
 def record_handoff(

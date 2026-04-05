@@ -168,7 +168,14 @@ class JuveraSpanProcessor(SpanProcessor):
 
     def _compute_cost(self) -> float:
         s = self._stats
-        if s["model"] and (s["input_tokens"] or s["output_tokens"]):
-            from juvera_sdk.costs import compute_token_cost_usd
-            return compute_token_cost_usd(s["model"], s["input_tokens"], s["output_tokens"])
+        if (s["model"] or s["provider"]) and (s["input_tokens"] or s["output_tokens"]):
+            from juvera_sdk.costs import estimate_token_cost_usd
+
+            cost, _ = estimate_token_cost_usd(
+                model=s.get("model"),
+                provider=s.get("provider"),
+                input_tokens=s["input_tokens"],
+                output_tokens=s["output_tokens"],
+            )
+            return cost
         return 0.0

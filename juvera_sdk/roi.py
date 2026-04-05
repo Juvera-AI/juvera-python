@@ -1,5 +1,6 @@
 # juvera_sdk/roi.py
 from __future__ import annotations
+import importlib
 import warnings
 from typing import Any
 
@@ -49,7 +50,8 @@ def estimate_roi(
     Returns None with a warning if workflow_type is unknown.
     """
     from juvera_sdk import _get_config
-    from juvera_sdk import context as _ctx
+
+    _ctx = importlib.import_module("juvera_sdk.context")
 
     config = _get_config()
 

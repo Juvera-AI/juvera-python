@@ -37,6 +37,8 @@ def main() -> int:
     validate.set_defaults(func=run_validate)
 
     patch = subparsers.add_parser("patch", help="Show the recommended upgrade path from proxy mode to SDK instrumentation.")
+    patch.add_argument("--base-url", default=f"http://{DEFAULT_HOST}:{DEFAULT_PORT}")
+    patch.add_argument("--cwd", default=".")
     patch.set_defaults(func=run_patch)
 
     args = parser.parse_args()

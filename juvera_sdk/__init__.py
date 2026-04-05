@@ -1,7 +1,7 @@
 """Juvera SDK — open instrumentation for AI agents."""
 from __future__ import annotations
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 from juvera_sdk.config import JuveraConfig
 import juvera_sdk.tracer as _tracer
 
@@ -15,7 +15,7 @@ def init(
     service_name: str | None = None,
     domain: str | None = None,
     agent_id: str | None = None,
-    debug: bool = False,
+    debug: bool | None = None,
     workflow_baselines: dict | None = None,
     _exporter=None,   # test hook
 ) -> None:
@@ -56,10 +56,24 @@ def shutdown() -> None:
 from juvera_sdk.span import agent_span          # noqa: E402
 from juvera_sdk.signals import record_impact_signal  # noqa: E402
 from juvera_sdk.handoff import record_handoff   # noqa: E402
-from juvera_sdk.context import set_work_item, clear_work_item  # noqa: E402
+from juvera_sdk.context import (  # noqa: E402
+    clear_context,
+    clear_work_item,
+    context,
+    set_context,
+    set_work_item,
+    workflow,
+)
 from juvera_sdk.events import record_event       # noqa: E402
 from juvera_sdk.roi import estimate_roi          # noqa: E402
-from juvera_sdk.wrappers import wrap_openai, wrap_anthropic  # noqa: E402
+from juvera_sdk.frameworks import (  # noqa: E402
+    instrument_autogen,
+    instrument_crewai,
+    instrument_langchain,
+    instrument_langgraph,
+    instrument_openai_agents,
+)
+from juvera_sdk.wrappers import wrap_anthropic, wrap_openai, wrap_openai_responses  # noqa: E402
 from juvera_sdk.decorators import (  # noqa: E402
     anthropic_agent,
     instrument,
@@ -115,9 +129,12 @@ def get_plugin_path() -> str:
 __all__ = [
     "__version__", "init", "agent_span", "record_impact_signal",
     "record_handoff", "record_event", "estimate_roi",
-    "set_work_item", "clear_work_item",
+    "set_work_item", "clear_work_item", "workflow",
+    "context", "set_context", "clear_context",
     "instrument", "openai_agent", "anthropic_agent", "tool_call", "response_text",
-    "wrap_openai", "wrap_anthropic",
+    "wrap_openai", "wrap_openai_responses", "wrap_anthropic",
+    "instrument_openai_agents", "instrument_langgraph", "instrument_langchain",
+    "instrument_crewai", "instrument_autogen",
     "agent", "impact",
     "flush", "shutdown", "get_plugin_path",
 ]

@@ -1,7 +1,9 @@
 import pytest
 import juvera_sdk as j
 from juvera_sdk.exporters.mock import MockExporter
-from juvera_sdk import context as _ctx
+import importlib
+
+_ctx = importlib.import_module("juvera_sdk.context")
 
 
 @pytest.fixture(autouse=True)
@@ -66,3 +68,20 @@ def test_uuid_generated_when_no_context_var_set(sdk_init):
     attrs = exporter.last_span().attributes
     assert attrs.get("juvera.work_item_id") is not None
     assert len(attrs["juvera.work_item_id"]) > 8
+
+
+def test_workflow_and_context_helpers_propagate_to_agent_span(sdk_init):
+    exporter = sdk_init
+    with j.context(user_id="u_1", session_id="sess_1", subject_key="customer_1", metadata={"tier": "enterprise"}, tags=["prod"]):
+        with j.workflow(work_item_id="wi_ctx", workflow_type="ticket_deflection", agent_id="agent_ctx", domain="support"):
+            with j.agent_span(agent_id="agent_ctx") as span:
+                span.set_experiment("exp_1", "variant_a", subject_key="customer_1")
+
+    attrs = exporter.last_span().attributes
+    assert attrs["juvera.work_item_id"] == "wi_ctx"
+    assert attrs["juvera.workflow_type"] == "ticket_deflection"
+    assert attrs["juvera.domain"] == "support"
+    assert attrs["juvera.user_id"] == "u_1"
+    assert attrs["juvera.session_id"] == "sess_1"
+    assert attrs["juvera.properties.subject_key"] == "customer_1"
+    assert attrs["juvera.instrumentation_readiness"] == "measurement_ready"

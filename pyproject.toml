@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "juvera-sdk"
-version = "0.1.6"
+version = "0.1.8"
 description = "Open instrumentation SDK for Juvera — emit agent telemetry and business-impact signals"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -20,6 +20,27 @@ dependencies = [
 juvera = "juvera_sdk.cli:main"
 
 [project.optional-dependencies]
+openai = [
+  "openai>=1.0",
+]
+anthropic = [
+  "anthropic>=0.30",
+]
+"openai-agents" = [
+  "openai-agents>=0.0.10",
+]
+langgraph = [
+  "openinference-instrumentation-langgraph>=0.1",
+]
+langchain = [
+  "openinference-instrumentation-langchain>=0.1",
+]
+crewai = [
+  "crewai>=0.40",
+]
+autogen = [
+  "pyautogen>=0.2",
+]
 dev = [
   "pytest>=8.0",
   "respx>=0.21",

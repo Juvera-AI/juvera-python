@@ -1,4 +1,9 @@
-from juvera_sdk.local_relay import build_proxy_trace_envelope, enrich_trace_envelope, inspect_trace_envelope
+from juvera_sdk.local_relay import (
+    build_proxy_trace_envelope,
+    detect_project_context,
+    enrich_trace_envelope,
+    inspect_trace_envelope,
+)
 
 
 def test_inspect_trace_envelope_detects_attribution_ready_sdk_batch():
@@ -33,6 +38,8 @@ def test_inspect_trace_envelope_detects_attribution_ready_sdk_batch():
     assert metadata["sourceMode"] == "sdk"
     assert metadata["instrumentationReadiness"] == "attribution_ready"
     assert metadata["requiredFields"]["work_item_id"] is True
+    assert metadata["providerDetected"] is False
+    assert metadata["costComputed"] is False
 
 
 def test_enrich_trace_envelope_adds_capture_metadata():
@@ -64,3 +71,14 @@ def test_build_proxy_trace_envelope_is_always_provisional():
     assert values["juvera.capture_source"]["stringValue"] == "proxy"
     assert values["juvera.instrumentation_readiness"]["stringValue"] == "provisional"
     assert metadata["requiredFields"]["work_item_id"] is False
+    assert metadata["providerDetected"] is True
+    assert metadata["modelDetected"] is True
+    assert metadata["tokenUsageDetected"] is True
+    assert metadata["costComputed"] is True
+
+
+def test_detect_project_context_scans_common_dependency_files(tmp_path):
+    (tmp_path / "requirements.txt").write_text("openai\nlanggraph\n")
+    context = detect_project_context(str(tmp_path))
+    assert "openai" in context["frameworks"]
+    assert "langgraph" in context["frameworks"]
