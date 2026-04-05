@@ -433,6 +433,8 @@ class RelayRuntimeState:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     started_at: str = field(default_factory=_now_iso)
     last_activity_at: str | None = None
+    setup_session_id: str | None = None
+    setup_provisioned: bool = False
     proxy_traffic_detected: bool = False
     sdk_spans_detected: bool = False
     detected_providers: set[str] = field(default_factory=set)
@@ -458,6 +460,9 @@ class RelayRuntimeState:
             return {
                 "status": "online",
                 "sessionId": self.session_id,
+                "setupSessionId": self.setup_session_id,
+                "setupProvisioned": self.setup_provisioned,
+                "awaitingSetupProvision": bool(self.setup_session_id and not self.setup_provisioned),
                 "startedAt": self.started_at,
                 "lastActivityAt": self.last_activity_at,
                 "proxyTrafficDetected": self.proxy_traffic_detected,
@@ -520,6 +525,7 @@ class RelayConfig:
         *,
         api_base_url: str = DEFAULT_API_BASE_URL,
         setup_token: str | None = None,
+        setup_id: str | None = None,
         environment: str = "local",
     ):
         self.host = host
@@ -529,13 +535,15 @@ class RelayConfig:
         self.api_key = api_key
         self.org_id = org_id
         self.setup_token = setup_token
+        self.setup_id = setup_id
         self.environment = environment
         self.setup_agent_id: str | None = None
-        self.setup_session_id: str | None = None
+        self.setup_session_id: str | None = setup_id
         self.app_base_url: str | None = None
         self.workflow_type: str = "llm_proxy_test"
         self.state = RelayRuntimeState()
         self.state.project_context = detect_project_context()
+        self.state.setup_session_id = setup_id
 
 
 def _copy_response_headers(source: httpx.Response, handler: BaseHTTPRequestHandler) -> None:
@@ -588,11 +596,47 @@ def _bootstrap_setup_context(config: RelayConfig) -> None:
     )
     response.raise_for_status()
     payload = response.json()
+    bootstrapped_session_id = payload.get("sessionId")
+    if config.setup_session_id and bootstrapped_session_id and bootstrapped_session_id != config.setup_session_id:
+        raise ValueError(f"setup session mismatch: expected {config.setup_session_id}, got {bootstrapped_session_id}")
     config.org_id = payload.get("orgId") or config.org_id
     config.setup_agent_id = payload.get("agentId")
-    config.setup_session_id = payload.get("sessionId")
+    config.setup_session_id = bootstrapped_session_id
     config.app_base_url = payload.get("appBaseUrl")
     config.environment = payload.get("environment") or config.environment
+    config.state.setup_session_id = config.setup_session_id
+    config.state.setup_provisioned = True
+
+
+def _configure_setup_provision(config: RelayConfig, session_id: str | None, setup_token: str) -> dict[str, Any]:
+    expected_session_id = (session_id or config.setup_session_id or config.setup_id or "").strip()
+    if not expected_session_id:
+        raise ValueError("Missing setup session id")
+    previous_token = config.setup_token
+    previous_session_id = config.setup_session_id
+    previous_agent_id = config.setup_agent_id
+    previous_app_base_url = config.app_base_url
+    previous_environment = config.environment
+    previous_provisioned = config.state.setup_provisioned
+    config.setup_token = setup_token
+    config.setup_session_id = expected_session_id
+    config.state.setup_session_id = expected_session_id
+    try:
+        _bootstrap_setup_context(config)
+    except Exception:
+        config.setup_token = previous_token
+        config.setup_session_id = previous_session_id
+        config.setup_agent_id = previous_agent_id
+        config.app_base_url = previous_app_base_url
+        config.environment = previous_environment
+        config.state.setup_session_id = previous_session_id
+        config.state.setup_provisioned = previous_provisioned
+        raise
+    return {
+        "setupSessionId": config.setup_session_id,
+        "setupProvisioned": config.state.setup_provisioned,
+        "appBaseUrl": config.app_base_url,
+    }
 
 
 def _poll_setup_status(config: RelayConfig) -> dict[str, Any] | None:
@@ -634,7 +678,7 @@ def _launch_episode_url_poll(config: RelayConfig) -> None:
 
 def _forward_to_ingest(config: RelayConfig, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     if not config.api_key and not config.setup_token:
-        return 202, {"accepted": False, "detail": "Relay captured traffic locally, but JUVERA_API_KEY or JUVERA_SETUP_TOKEN is not set so nothing was forwarded."}
+        return 202, {"accepted": False, "detail": "Relay captured traffic locally, but Juvera has not provisioned a setup token yet. Keep the onboarding tab open, or use JUVERA_API_KEY / JUVERA_SETUP_TOKEN directly."}
     response = httpx.post(
         f"{config.ingest_endpoint}{path}",
         json=payload,
@@ -731,6 +775,24 @@ def build_handler(config: RelayConfig):
             _send_json(self, 404, {"detail": "Not found"})
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/setup/bootstrap":
+                payload = _read_json_body(self)
+                if payload is None:
+                    _send_json(self, 400, {"detail": "Invalid JSON"})
+                    return
+                token = str(payload.get("setupToken") or "").strip()
+                session_id = str(payload.get("sessionId") or "").strip() or None
+                if not token:
+                    _send_json(self, 401, {"detail": "Missing setup token"})
+                    return
+                try:
+                    provisioned = _configure_setup_provision(config, session_id, token)
+                    _send_json(self, 200, {"accepted": True, **provisioned})
+                except Exception as exc:
+                    config.state.record_error(f"setup provision failed: {exc}")
+                    _send_json(self, 400, {"accepted": False, "detail": f"Failed to provision setup: {exc}"})
+                return
+
             if self.path == "/v1/traces":
                 payload = _read_json_body(self)
                 if payload is None:
@@ -783,6 +845,7 @@ def run_listen(args: argparse.Namespace) -> int:
         org_id=args.org_id,
         api_base_url=args.api_base_url,
         setup_token=args.setup_token,
+        setup_id=args.setup_id,
         environment=args.environment,
     )
     if config.setup_token:
@@ -796,6 +859,8 @@ def run_listen(args: argparse.Namespace) -> int:
     print(f"[juvera] Status endpoint: http://{args.host}:{args.port}/status")
     print(f"[juvera] Proxy OpenAI via http://{args.host}:{args.port}/proxy/openai/v1")
     print(f"[juvera] Proxy Anthropic via http://{args.host}:{args.port}/proxy/anthropic/v1")
+    if config.setup_session_id and not config.state.setup_provisioned:
+        print(f"[juvera] Waiting for browser provisioning for setup session: {config.setup_session_id}")
     if config.app_base_url:
         print(f"[juvera] Juvera app: {config.app_base_url}")
     try:

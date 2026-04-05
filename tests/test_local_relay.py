@@ -1,4 +1,5 @@
 from juvera_sdk.local_relay import (
+    RelayConfig,
     build_proxy_trace_envelope,
     detect_project_context,
     enrich_trace_envelope,
@@ -86,3 +87,18 @@ def test_detect_project_context_scans_common_dependency_files(tmp_path):
     context = detect_project_context(str(tmp_path))
     assert "openai" in context["frameworks"]
     assert "langgraph" in context["frameworks"]
+
+
+def test_relay_status_marks_setup_id_as_awaiting_browser_provision():
+    config = RelayConfig(
+        host="127.0.0.1",
+        port=4318,
+        ingest_endpoint="http://localhost:8001",
+        api_key=None,
+        org_id=None,
+        setup_id="session-123",
+    )
+    snapshot = config.state.snapshot()
+    assert snapshot["setupSessionId"] == "session-123"
+    assert snapshot["setupProvisioned"] is False
+    assert snapshot["awaitingSetupProvision"] is True

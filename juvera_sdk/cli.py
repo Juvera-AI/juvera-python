@@ -27,6 +27,7 @@ def main() -> int:
     listen.add_argument("--api-key", default=os.getenv("JUVERA_API_KEY"))
     listen.add_argument("--org-id", default=os.getenv("JUVERA_ORG_ID"))
     listen.add_argument("--setup-token", default=os.getenv("JUVERA_SETUP_TOKEN"))
+    listen.add_argument("--setup-id", default=os.getenv("JUVERA_SETUP_ID"))
     listen.add_argument("--environment", default=os.getenv("JUVERA_ENVIRONMENT", "local"))
     listen.set_defaults(func=run_listen)
 
