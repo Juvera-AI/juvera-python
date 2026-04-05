@@ -42,6 +42,40 @@ j.flush()
 
 `endpoint="local"` prints everything to stdout with no network calls. Switch to your Juvera gateway URL when ready for production.
 
+### Less boilerplate with decorators
+
+If manual `span.set_prompt()` / `span.set_tokens()` calls feel too heavy, wrap your provider call once and let Juvera extract the common fields from the response:
+
+```python
+import juvera_sdk as j
+
+@j.anthropic_agent(
+    "triage_agent",
+    workflow_type="ticket_deflection",
+    work_item_id="wi_{ticket.ticket_id}",
+    prompt="prompt",
+    tools=[j.tool_call("lookup_crm", duration_ms=45)],
+)
+def classify_ticket(prompt, ticket, model="claude-sonnet-4-20250514"):
+    return claude.messages.create(
+        model=model,
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+response = classify_ticket(
+    prompt=f"Classify this ticket: {ticket['body']}",
+    ticket=ticket,
+)
+triage_text = j.response_text(response)
+```
+
+Built-in decorators:
+
+- `@j.openai_agent(...)` extracts model, completion, and token usage from OpenAI responses
+- `@j.anthropic_agent(...)` does the same for Anthropic Messages responses
+- `@j.instrument(...)` is the provider-agnostic escape hatch when you want a custom parser
+
 ---
 
 ## Juvera Local Relay

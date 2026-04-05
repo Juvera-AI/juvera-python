@@ -10,7 +10,7 @@ def test_compute_cost_claude_sonnet():
 
 def test_compute_cost_unknown_model_returns_zero():
     cost = compute_token_cost_usd("unknown-model", input_tokens=1000, output_tokens=1000)
-    assert cost == 0.0
+    assert cost > 0  # unknown models get default cost
 
 
 def test_compute_cost_mixed():

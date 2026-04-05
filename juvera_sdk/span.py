@@ -134,9 +134,12 @@ def agent_span(
         wid_token = _ctx._work_item_id.set(wid)
         aid_token = _ctx._agent_id.set(agent_id)
         wf_token = _ctx._workflow_type.set(eff_workflow_type)
+        juvera_span = AgentSpan(otel_span, wid)
+        span_token = _ctx.set_current_span(juvera_span)
         try:
-            yield AgentSpan(otel_span, wid)
+            yield juvera_span
         finally:
+            _ctx._current_span.set(None)
             _ctx._work_item_id.reset(wid_token)
             _ctx._agent_id.reset(aid_token)
             _ctx._workflow_type.reset(wf_token)

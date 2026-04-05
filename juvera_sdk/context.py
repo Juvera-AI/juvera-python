@@ -37,3 +37,19 @@ def set_work_item(work_item_id: str, workflow_type: str | None = None) -> None:
 def clear_work_item() -> None:
     _work_item_id.set(None)
     _workflow_type.set(None)
+
+
+# Current Juvera span (for client wrapper auto-instrumentation)
+_current_span: ContextVar = ContextVar("juvera_current_span", default=None)
+
+
+def get_current_span():
+    return _current_span.get()
+
+
+def set_current_span(span):
+    return _current_span.set(span)
+
+
+def clear_current_span():
+    _current_span.set(None)
