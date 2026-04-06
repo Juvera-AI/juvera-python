@@ -94,8 +94,17 @@ def _apply_response_to_span(
         span.set_completion(str(completion))
     input_tokens = parsed.get("input_tokens")
     output_tokens = parsed.get("output_tokens")
+    cache_read = parsed.get("cache_read_tokens")
+    cache_creation = parsed.get("cache_creation_tokens")
+    reasoning = parsed.get("reasoning_tokens")
     if input_tokens or output_tokens:
-        span.set_tokens(input=int(input_tokens or 0), output=int(output_tokens or 0))
+        span.set_tokens(
+            input=int(input_tokens or 0),
+            output=int(output_tokens or 0),
+            cache_read=int(cache_read or 0),
+            cache_creation=int(cache_creation or 0),
+            reasoning=int(reasoning or 0),
+        )
     span.set_attribute("juvera.latency_ms", latency_ms)
     _add_response_tool_calls(span, provider=provider, response=response)
 

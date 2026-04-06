@@ -26,9 +26,15 @@ class AgentSpan:
         if provider:
             self._span.set_attribute("gen_ai.system", provider)
 
-    def set_tokens(self, input: int = 0, output: int = 0) -> None:
+    def set_tokens(self, input: int = 0, output: int = 0, cache_read: int = 0, cache_creation: int = 0, reasoning: int = 0) -> None:
         self._span.set_attribute("gen_ai.usage.input_tokens", input)
         self._span.set_attribute("gen_ai.usage.output_tokens", output)
+        if cache_read:
+            self._span.set_attribute("gen_ai.usage.cache_read_tokens", cache_read)
+        if cache_creation:
+            self._span.set_attribute("gen_ai.usage.cache_creation_tokens", cache_creation)
+        if reasoning:
+            self._span.set_attribute("gen_ai.usage.reasoning_tokens", reasoning)
 
     def set_prompt(self, text: str) -> None:
         self._span.set_attribute("gen_ai.prompt", text)

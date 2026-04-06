@@ -441,12 +441,18 @@ def _parse_openai_response(result: Any) -> dict[str, Any]:
             message = _read(choices[0], "message")
             completion = _coerce_text(_read(message, "content"))
 
+    # Extract cache and reasoning tokens from provider response
+    prompt_tokens_details = _read(usage, "prompt_tokens_details") or {}
+    completion_tokens_details = _read(usage, "completion_tokens_details") or {}
+
     return {
         "provider": "openai",
         "model": _read(result, "model"),
         "completion": completion,
         "input_tokens": _read(usage, "prompt_tokens"),
         "output_tokens": _read(usage, "completion_tokens"),
+        "cache_read_tokens": _read(prompt_tokens_details, "cached_tokens"),
+        "reasoning_tokens": _read(completion_tokens_details, "reasoning_tokens"),
     }
 
 
@@ -458,6 +464,8 @@ def _parse_anthropic_response(result: Any) -> dict[str, Any]:
         "completion": _coerce_text(_read(result, "content")),
         "input_tokens": _read(usage, "input_tokens"),
         "output_tokens": _read(usage, "output_tokens"),
+        "cache_creation_tokens": _read(usage, "cache_creation_input_tokens"),
+        "cache_read_tokens": _read(usage, "cache_read_input_tokens"),
     }
 
 
@@ -470,6 +478,9 @@ def _normalize_parsed_response(parsed: dict[str, Any] | None) -> dict[str, Any]:
         "completion": parsed.get("completion"),
         "input_tokens": parsed.get("input_tokens", parsed.get("input")),
         "output_tokens": parsed.get("output_tokens", parsed.get("output")),
+        "cache_read_tokens": parsed.get("cache_read_tokens"),
+        "cache_creation_tokens": parsed.get("cache_creation_tokens"),
+        "reasoning_tokens": parsed.get("reasoning_tokens"),
     }
 
 
