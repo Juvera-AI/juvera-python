@@ -105,6 +105,26 @@ def _apply_response_to_span(
             cache_creation=int(cache_creation or 0),
             reasoning=int(reasoning or 0),
         )
+        # PROPAGATION: also set tokens on the current OTel span if different
+        # This ensures manually-created parent spans capture the data
+        try:
+            from opentelemetry import trace as _otel_trace
+            current = _otel_trace.get_current_span()
+            wrapper_span = getattr(span, '_span', None)
+            if current is not None and current is not wrapper_span and current.is_recording():
+                current.set_attribute("gen_ai.usage.input_tokens", int(input_tokens or 0))
+                current.set_attribute("gen_ai.usage.output_tokens", int(output_tokens or 0))
+                if cache_read:
+                    current.set_attribute("gen_ai.usage.cache_read_tokens", int(cache_read))
+                if cache_creation:
+                    current.set_attribute("gen_ai.usage.cache_creation_tokens", int(cache_creation))
+                if reasoning:
+                    current.set_attribute("gen_ai.usage.reasoning_tokens", int(reasoning))
+                if model:
+                    current.set_attribute("gen_ai.request.model", str(model))
+                    current.set_attribute("gen_ai.system", str(provider_name))
+        except Exception:
+            pass
     span.set_attribute("juvera.latency_ms", latency_ms)
     _add_response_tool_calls(span, provider=provider, response=response)
 
@@ -185,6 +205,169 @@ def _call_with_optional_span(
             context_manager.__exit__(None, None, None)
 
 
+class _OpenAIStreamWrapper:
+    """Wraps an OpenAI stream iterator to capture final usage chunk."""
+
+    def __init__(self, stream, span, context_manager, provider, parser, model_hint, latency_start):
+        self._stream = stream
+        self._span = span
+        self._context_manager = context_manager
+        self._provider = provider
+        self._parser = parser
+        self._model_hint = model_hint
+        self._latency_start = latency_start
+        self._final_usage = None
+        self._model = None
+        self._finalized = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            chunk = next(self._stream)
+        except StopIteration:
+            self._finalize()
+            raise
+        # Capture usage if present (final chunk)
+        if hasattr(chunk, 'usage') and chunk.usage is not None:
+            self._final_usage = chunk.usage
+        if hasattr(chunk, 'model') and chunk.model:
+            self._model = chunk.model
+        return chunk
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            chunk = await self._stream.__anext__()
+        except StopAsyncIteration:
+            self._finalize()
+            raise
+        if hasattr(chunk, 'usage') and chunk.usage is not None:
+            self._final_usage = chunk.usage
+        if hasattr(chunk, 'model') and chunk.model:
+            self._model = chunk.model
+        return chunk
+
+    def _finalize(self):
+        if self._finalized:
+            return
+        self._finalized = True
+        if self._final_usage is not None:
+            # Build a synthetic response with usage
+            synthetic = type('Response', (), {
+                'usage': self._final_usage,
+                'model': self._model,
+                'choices': [],
+                'output_text': None,
+            })()
+            latency_ms = int((time.perf_counter() - self._latency_start) * 1000)
+            try:
+                _apply_response_to_span(
+                    self._span, synthetic,
+                    provider=self._provider, parser=self._parser,
+                    model_hint=self._model_hint, latency_ms=latency_ms,
+                )
+            except Exception:
+                pass
+        if self._context_manager is not None:
+            try:
+                self._context_manager.__exit__(None, None, None)
+            except Exception:
+                pass
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+class _AnthropicStreamWrapper:
+    """Wraps an Anthropic stream iterator to aggregate token usage."""
+
+    def __init__(self, stream, span, context_manager, model_hint, latency_start):
+        self._stream = stream
+        self._span = span
+        self._context_manager = context_manager
+        self._model_hint = model_hint
+        self._latency_start = latency_start
+        self._input_tokens = 0
+        self._output_tokens = 0
+        self._cache_creation = 0
+        self._cache_read = 0
+        self._model = None
+        self._finalized = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            event = next(self._stream)
+        except StopIteration:
+            self._finalize()
+            raise
+        self._handle_event(event)
+        return event
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            event = await self._stream.__anext__()
+        except StopAsyncIteration:
+            self._finalize()
+            raise
+        self._handle_event(event)
+        return event
+
+    def _handle_event(self, event):
+        # Anthropic emits typed events
+        event_type = getattr(event, 'type', None)
+        if event_type == 'message_start':
+            message = getattr(event, 'message', None)
+            if message:
+                usage = getattr(message, 'usage', None)
+                if usage:
+                    self._input_tokens = getattr(usage, 'input_tokens', 0) or 0
+                    self._cache_creation = getattr(usage, 'cache_creation_input_tokens', 0) or 0
+                    self._cache_read = getattr(usage, 'cache_read_input_tokens', 0) or 0
+                self._model = getattr(message, 'model', None)
+        elif event_type == 'message_delta':
+            usage = getattr(event, 'usage', None)
+            if usage:
+                # Anthropic's message_delta usage.output_tokens is cumulative
+                self._output_tokens = getattr(usage, 'output_tokens', self._output_tokens) or self._output_tokens
+
+    def _finalize(self):
+        if self._finalized:
+            return
+        self._finalized = True
+        if self._input_tokens or self._output_tokens:
+            try:
+                if self._model:
+                    self._span.set_model(str(self._model), provider='anthropic')
+                self._span.set_tokens(
+                    input=int(self._input_tokens),
+                    output=int(self._output_tokens),
+                    cache_read=int(self._cache_read),
+                    cache_creation=int(self._cache_creation),
+                )
+                latency_ms = int((time.perf_counter() - self._latency_start) * 1000)
+                self._span.set_attribute("juvera.latency_ms", latency_ms)
+            except Exception:
+                pass
+        if self._context_manager is not None:
+            try:
+                self._context_manager.__exit__(None, None, None)
+            except Exception:
+                pass
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
 class _OpenAICompletionsProxy:
     def __init__(
         self,
@@ -202,6 +385,13 @@ class _OpenAICompletionsProxy:
         self._business_unit = business_unit
 
     def create(self, *args: Any, **kwargs: Any) -> Any:
+        is_stream = kwargs.get("stream", False)
+        if is_stream:
+            # Inject include_usage into stream_options (preserving any existing options)
+            stream_opts = dict(kwargs.get("stream_options") or {})
+            stream_opts["include_usage"] = True
+            kwargs["stream_options"] = stream_opts
+            return self._handle_stream(*args, **kwargs)
         return _call_with_optional_span(
             lambda: self._original.create(*args, **kwargs),
             provider="openai",
@@ -212,6 +402,35 @@ class _OpenAICompletionsProxy:
             default_workflow_type=self._default_workflow_type,
             domain=self._domain,
             business_unit=self._business_unit,
+        )
+
+    def _handle_stream(self, *args: Any, **kwargs: Any) -> Any:
+        active_span = _ctx.get_current_span()
+        if active_span is None:
+            context_manager = agent_span(
+                agent_id=_resolve_agent_id(self._agent_id),
+                domain=self._domain,
+                workflow_type=self._default_workflow_type,
+                business_unit=self._business_unit,
+            )
+            active_span = context_manager.__enter__()
+        else:
+            context_manager = None
+        prompt = _extract_openai_prompt(kwargs)
+        if prompt:
+            active_span.set_prompt(prompt)
+        started = time.perf_counter()
+        try:
+            stream = self._original.create(*args, **kwargs)
+        except Exception as exc:
+            active_span.set_error(exc)
+            if context_manager is not None:
+                context_manager.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+        return _OpenAIStreamWrapper(
+            stream, active_span, context_manager,
+            provider="openai", parser="openai",
+            model_hint=kwargs.get("model"), latency_start=started,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -264,6 +483,9 @@ class _AnthropicMessagesProxy:
         self._business_unit = business_unit
 
     def create(self, *args: Any, **kwargs: Any) -> Any:
+        is_stream = kwargs.get("stream", False)
+        if is_stream:
+            return self._handle_stream(*args, **kwargs)
         return _call_with_optional_span(
             lambda: self._original.create(*args, **kwargs),
             provider="anthropic",
@@ -274,6 +496,34 @@ class _AnthropicMessagesProxy:
             default_workflow_type=self._default_workflow_type,
             domain=self._domain,
             business_unit=self._business_unit,
+        )
+
+    def _handle_stream(self, *args: Any, **kwargs: Any) -> Any:
+        active_span = _ctx.get_current_span()
+        if active_span is None:
+            context_manager = agent_span(
+                agent_id=_resolve_agent_id(self._agent_id),
+                domain=self._domain,
+                workflow_type=self._default_workflow_type,
+                business_unit=self._business_unit,
+            )
+            active_span = context_manager.__enter__()
+        else:
+            context_manager = None
+        prompt = _extract_anthropic_prompt(kwargs)
+        if prompt:
+            active_span.set_prompt(prompt)
+        started = time.perf_counter()
+        try:
+            stream = self._original.create(*args, **kwargs)
+        except Exception as exc:
+            active_span.set_error(exc)
+            if context_manager is not None:
+                context_manager.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+        return _AnthropicStreamWrapper(
+            stream, active_span, context_manager,
+            model_hint=kwargs.get("model"), latency_start=started,
         )
 
     def __getattr__(self, name: str) -> Any:
