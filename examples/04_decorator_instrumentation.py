@@ -1,10 +1,22 @@
-"""Decorator-based Juvera instrumentation for direct provider SDK calls."""
+"""Decorator-based Juvera instrumentation for direct provider SDK calls.
+
+Prerequisites:
+    pip install juvera-sdk anthropic
+    export JUVERA_API_KEY=jvr_...
+    export JUVERA_ORG_ID=your-org-id
+    export ANTHROPIC_API_KEY=sk-ant-...
+"""
 
 from __future__ import annotations
 
 import os
+import sys
 
-import anthropic
+try:
+    import anthropic
+except ImportError:
+    sys.exit("Error: this example requires the anthropic SDK: pip install anthropic")
+
 import juvera_sdk as j
 
 
@@ -25,7 +37,7 @@ client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     prompt="prompt",
     tools=[j.tool_call("lookup_crm", duration_ms=45)],
 )
-def classify_ticket(prompt: str, ticket: dict[str, str], model: str = "claude-sonnet-4-20250514"):
+def classify_ticket(prompt: str, ticket: dict[str, str], model: str = "claude-sonnet-4-6"):
     return client.messages.create(
         model=model,
         max_tokens=300,

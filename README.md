@@ -75,7 +75,7 @@ import juvera_sdk as j
     prompt="prompt",
     tools=[j.tool_call("lookup_crm", duration_ms=45)],
 )
-def classify_ticket(prompt, ticket, model="claude-sonnet-4-20250514"):
+def classify_ticket(prompt, ticket, model="claude-sonnet-4-6"):
     return claude.messages.create(
         model=model,
         max_tokens=300,
