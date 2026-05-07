@@ -55,6 +55,54 @@ def _extract_anthropic_prompt(kwargs: dict[str, Any]) -> str | None:
     return prompt or None
 
 
+def _safe_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    name = exc.__class__.__name__.lower()
+    return isinstance(exc, TimeoutError) or "timeout" in name or "timedout" in name
+
+
+def _prompt_looks_malformed(kwargs: dict[str, Any], prompt: str | None) -> bool:
+    if prompt is not None:
+        return not prompt.strip()
+    if "messages" in kwargs:
+        messages = kwargs.get("messages")
+        return not isinstance(messages, list) or len(messages) == 0
+    if "input" in kwargs:
+        return kwargs.get("input") in (None, "", [])
+    if "prompt" in kwargs:
+        return kwargs.get("prompt") in (None, "", [])
+    return False
+
+
+def _apply_request_metadata(span: Any, kwargs: dict[str, Any], *, provider: str, prompt: str | None) -> None:
+    max_output_tokens = _safe_int(
+        kwargs.get("max_tokens")
+        or kwargs.get("max_completion_tokens")
+        or kwargs.get("max_output_tokens")
+    )
+    if max_output_tokens is not None:
+        span.set_attribute("gen_ai.request.max_tokens", max_output_tokens)
+        span.set_attribute("juvera.context_window.requested_output_tokens", max_output_tokens)
+    timeout = kwargs.get("timeout")
+    if timeout is not None:
+        try:
+            span.set_attribute("juvera.request.timeout_seconds", float(timeout))
+        except (TypeError, ValueError):
+            span.set_attribute("juvera.request.timeout_seconds", str(timeout))
+    if provider:
+        span.set_routing_decision(provider)
+    if _prompt_looks_malformed(kwargs, prompt):
+        span.mark_malformed_prompt(True)
+
+
 def _add_response_tool_calls(span: Any, *, provider: str, response: Any) -> None:
     if provider == "openai":
         choices = _read(response, "choices") or []
@@ -105,6 +153,13 @@ def _apply_response_to_span(
             cache_creation=int(cache_creation or 0),
             reasoning=int(reasoning or 0),
         )
+        span.set_context_window(
+            used_tokens=int(input_tokens or 0)
+            + int(output_tokens or 0)
+            + int(cache_read or 0)
+            + int(cache_creation or 0)
+            + int(reasoning or 0),
+        )
         # PROPAGATION: also set tokens on the current OTel span if different
         # This ensures manually-created parent spans capture the data
         try:
@@ -125,7 +180,7 @@ def _apply_response_to_span(
                     current.set_attribute("gen_ai.system", str(provider_name))
         except Exception:
             pass
-    span.set_attribute("juvera.latency_ms", latency_ms)
+    span.set_latency(latency_ms)
     _add_response_tool_calls(span, provider=provider, response=response)
 
 
@@ -140,6 +195,7 @@ def _call_with_optional_span(
     default_workflow_type: str | None,
     domain: str | None,
     business_unit: str | None,
+    request_kwargs: dict[str, Any] | None = None,
 ) -> Any:
     active_span = _ctx.get_current_span()
     if active_span is None:
@@ -155,11 +211,14 @@ def _call_with_optional_span(
 
     if prompt:
         active_span.set_prompt(prompt)
+    _apply_request_metadata(active_span, request_kwargs or {}, provider=provider, prompt=prompt)
 
     started = time.perf_counter()
     try:
         result = call()
     except Exception as exc:
+        if _is_timeout_error(exc):
+            active_span.mark_timeout(True)
         active_span.set_error(exc)
         if context_manager is not None:
             context_manager.__exit__(type(exc), exc, exc.__traceback__)
@@ -170,6 +229,8 @@ def _call_with_optional_span(
             try:
                 response = await result
             except Exception as exc:
+                if _is_timeout_error(exc):
+                    active_span.mark_timeout(True)
                 active_span.set_error(exc)
                 raise
             else:
@@ -355,7 +416,13 @@ class _AnthropicStreamWrapper:
                     cache_creation=int(self._cache_creation),
                 )
                 latency_ms = int((time.perf_counter() - self._latency_start) * 1000)
-                self._span.set_attribute("juvera.latency_ms", latency_ms)
+                self._span.set_latency(latency_ms)
+                self._span.set_context_window(
+                    used_tokens=int(self._input_tokens)
+                    + int(self._output_tokens)
+                    + int(self._cache_read)
+                    + int(self._cache_creation),
+                )
             except Exception:
                 pass
         if self._context_manager is not None:
@@ -402,6 +469,7 @@ class _OpenAICompletionsProxy:
             default_workflow_type=self._default_workflow_type,
             domain=self._domain,
             business_unit=self._business_unit,
+            request_kwargs=kwargs,
         )
 
     def _handle_stream(self, *args: Any, **kwargs: Any) -> Any:
@@ -419,10 +487,13 @@ class _OpenAICompletionsProxy:
         prompt = _extract_openai_prompt(kwargs)
         if prompt:
             active_span.set_prompt(prompt)
+        _apply_request_metadata(active_span, kwargs, provider="openai", prompt=prompt)
         started = time.perf_counter()
         try:
             stream = self._original.create(*args, **kwargs)
         except Exception as exc:
+            if _is_timeout_error(exc):
+                active_span.mark_timeout(True)
             active_span.set_error(exc)
             if context_manager is not None:
                 context_manager.__exit__(type(exc), exc, exc.__traceback__)
@@ -496,6 +567,7 @@ class _AnthropicMessagesProxy:
             default_workflow_type=self._default_workflow_type,
             domain=self._domain,
             business_unit=self._business_unit,
+            request_kwargs=kwargs,
         )
 
     def _handle_stream(self, *args: Any, **kwargs: Any) -> Any:
@@ -513,10 +585,13 @@ class _AnthropicMessagesProxy:
         prompt = _extract_anthropic_prompt(kwargs)
         if prompt:
             active_span.set_prompt(prompt)
+        _apply_request_metadata(active_span, kwargs, provider="anthropic", prompt=prompt)
         started = time.perf_counter()
         try:
             stream = self._original.create(*args, **kwargs)
         except Exception as exc:
+            if _is_timeout_error(exc):
+                active_span.mark_timeout(True)
             active_span.set_error(exc)
             if context_manager is not None:
                 context_manager.__exit__(type(exc), exc, exc.__traceback__)
