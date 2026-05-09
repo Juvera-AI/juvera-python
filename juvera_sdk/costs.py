@@ -9,11 +9,18 @@ from typing import Any
 
 
 def _catalog_path() -> Path:
+    # Package-relative location (the wheel-install case).
+    package_local = Path(__file__).resolve().parent / "data" / "model_pricing.json"
+    if package_local.is_file():
+        return package_local
+    # Fallback: parent walk for monorepo dev / editable install.
     for base in Path(__file__).resolve().parents:
         candidate = base / "packages" / "schemas" / "pricing" / "model_pricing.json"
         if candidate.is_file():
             return candidate
-    raise FileNotFoundError("Could not locate packages/schemas/pricing/model_pricing.json")
+    raise FileNotFoundError(
+        "Could not locate model_pricing.json in package data or via parent walk"
+    )
 
 
 @lru_cache(maxsize=1)
