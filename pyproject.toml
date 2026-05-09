@@ -52,6 +52,7 @@ include = ["juvera_sdk*"]
 
 [tool.setuptools.package-data]
 "*" = ["claude-plugin/**/*"]
+"juvera_sdk" = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -7,3 +7,7 @@ dist/
 build/
 .venv/
 venv/
+
+# Allow vendored package data despite root /data/ rule
+!juvera_sdk/data/
+!juvera_sdk/data/*.json
