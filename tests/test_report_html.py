@@ -29,7 +29,7 @@ def test_render_html_contains_hero_and_sections():
     html = render_html(SAMPLE_EVENTS, window_label="last 30d")
     assert "Juvera ROI Report" in html
     assert "ticket_deflection" in html
-    assert "+$44.00" in html
+    assert "+$43.99" in html  # floored, not rounded
     assert "Attribution gap" in html
     assert "Next steps" in html
 

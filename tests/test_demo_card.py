@@ -6,10 +6,12 @@ def test_card_contains_key_fields():
     out = render_roi_card(run, color=False, unicode=True)
     assert "ticket_deflection" in out
     assert "Human baseline" in out
-    assert "$22.00" in out
+    assert "$22.00" in out  # baseline is still normal cents
     assert "Agent cost" in out
-    assert "$0.00" in out
+    assert "$0.00017" in out  # sub-cent agent cost with 2 sig figs
     assert "Estimated value" in out
+    assert "+$21.99" in out  # floored savings
+    assert "99.99%" in out  # capped pct
     assert "Next: add work_item_id" in out
 
 

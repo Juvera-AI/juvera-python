@@ -8,6 +8,8 @@ from typing import Any, Iterable
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from juvera_sdk._fmt import fmt_cost, fmt_savings, fmt_pct
+
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -52,12 +54,16 @@ def build_report_context(
     # Build workflow breakdown
     by_workflow = []
     for wf, row in sorted(by_wf.items(), key=lambda kv: -kv[1]["savings"]):
+        attribution_pct = (100.0 * row["attributed"] / row["runs"]) if row["runs"] else 0
         by_workflow.append({
             "workflow_type": wf,
             "runs": row["runs"],
             "agent_cost": row["agent_cost"],
             "savings": row["savings"],
-            "attribution_pct": (100.0 * row["attributed"] / row["runs"]) if row["runs"] else 0,
+            "attribution_pct": attribution_pct,
+            "agent_cost_fmt": fmt_cost(row["agent_cost"]),
+            "savings_fmt": fmt_savings(row["savings"]),
+            "attribution_pct_fmt": fmt_pct(attribution_pct, max_pct=100.0),
         })
 
     top_workflow = by_workflow[0]["workflow_type"] if by_workflow else "—"
@@ -76,12 +82,17 @@ def build_report_context(
 
     # Get recent runs (last 50, reverse chronological)
     recent = sorted(events, key=lambda e: e.get("captured_at", ""), reverse=True)[:50]
+    recent = [
+        {**r, "agent_cost_usd_fmt": fmt_cost(r.get("agent_cost_usd") or 0)}
+        for r in recent
+    ]
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "window_label": window_label,
         "total_runs": total_runs,
         "total_savings": total_savings,
+        "total_savings_fmt": fmt_savings(total_savings),
         "top_workflow": top_workflow,
         "by_workflow": by_workflow,
         "top_issues": top_issues,
