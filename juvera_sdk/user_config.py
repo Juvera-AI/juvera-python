@@ -21,10 +21,10 @@ class InvalidConfigType(Exception):
 
 # Allowlisted config keys with their expected Python types and defaults.
 SCHEMA: dict[str, dict[str, Any]] = {
-    "telemetry": {"type": bool, "default": False},
-    "telemetry_endpoint": {"type": (str, type(None)), "default": None},
-    "prompted": {"type": bool, "default": False},
-    "install_id": {"type": str, "default": None},  # auto-generated on first read
+    "telemetry": {"type": bool, "default": False, "internal": False},
+    "telemetry_endpoint": {"type": (str, type(None)), "default": None, "internal": False},
+    "prompted": {"type": bool, "default": False, "internal": False},
+    "install_id": {"type": str, "default": None, "internal": True},  # auto-generated on first read
 }
 
 DEFAULTS = {k: v["default"] for k, v in SCHEMA.items()}
@@ -69,6 +69,10 @@ def set_value(key: str, value: Any) -> None:
         raise InvalidConfigKey(
             f"Unknown config key: {key!r}. Known: {sorted(SCHEMA.keys())}"
         )
+    if SCHEMA[key].get("internal"):
+        raise InvalidConfigKey(
+            f"Config key {key!r} is system-managed and cannot be set directly."
+        )
     expected = SCHEMA[key]["type"]
     if not isinstance(value, expected):
         raise InvalidConfigType(
@@ -80,6 +84,13 @@ def set_value(key: str, value: Any) -> None:
 
 
 def unset_value(key: str) -> None:
+    """Reset a key to its default value.
+
+    Special case for `install_id`: rather than reverting to None (which would
+    cause the next load_config() to silently generate a new id anyway), this
+    eagerly rotates to a fresh install_id immediately. This makes the rotation
+    explicit and observable.
+    """
     if key not in SCHEMA:
         raise InvalidConfigKey(f"Unknown config key: {key!r}")
     cfg = load_config()

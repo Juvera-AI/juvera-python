@@ -61,3 +61,20 @@ def test_install_id_generated_once_and_stable(tmp_path, monkeypatch):
     b = get_value("install_id")
     assert a == b
     assert len(a) == 26  # ULID
+
+
+def test_set_install_id_rejected(tmp_path, monkeypatch):
+    """install_id is system-managed; set_value must reject it."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with pytest.raises(InvalidConfigKey):
+        set_value("install_id", "DEADBEEF" * 4)
+
+
+def test_unset_install_id_rotates(tmp_path, monkeypatch):
+    """unset_value('install_id') generates a new id rather than leaving None."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    original = get_value("install_id")
+    unset_value("install_id")
+    new_id = get_value("install_id")
+    assert new_id != original
+    assert len(new_id) == 26
