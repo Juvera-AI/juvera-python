@@ -11,3 +11,13 @@ venv/
 # Allow vendored package data despite root /data/ rule
 !juvera_sdk/data/
 !juvera_sdk/data/*.json
+
+# Defensive: block common credential/key patterns from ever being committed
+.env*
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*
+*.tfstate
+*.tfstate.*
