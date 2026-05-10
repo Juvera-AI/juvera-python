@@ -29,7 +29,7 @@ def test_render_html_contains_hero_and_sections():
     html = render_html(SAMPLE_EVENTS, window_label="last 30d")
     assert "Juvera ROI Report" in html
     assert "ticket_deflection" in html
-    assert "+$43.9996" in html
+    assert "+$44.00" in html
     assert "Attribution gap" in html
     assert "Next steps" in html
 
@@ -38,7 +38,7 @@ def test_render_html_handles_empty_events():
     html = render_html([], window_label="last 7d")
     assert "0 agent runs captured" in html
     assert "last 7d" in html  # window_label rendered
-    assert "+$0.0000" in html
+    assert "+$0.00" in html
 
 
 def test_render_html_escapes_user_controlled_fields():

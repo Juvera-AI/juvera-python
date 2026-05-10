@@ -122,7 +122,7 @@ def run_report(args) -> int:
             f"# Juvera ROI Report\n\n"
             f"Generated {ctx['generated_at']}\n\n"
             f"- Total runs: {ctx['total_runs']}\n"
-            f"- Total estimated savings: +${ctx['total_savings']:.4f}\n"
+            f"- Total estimated savings: +${ctx['total_savings']:.2f}\n"
             f"- Top workflow: {ctx['top_workflow']}\n"
             f"- Unattributed: {ctx['unattributed_runs']}\n"
         )

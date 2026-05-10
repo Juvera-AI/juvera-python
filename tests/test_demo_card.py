@@ -8,7 +8,7 @@ def test_card_contains_key_fields():
     assert "Human baseline" in out
     assert "$22.00" in out
     assert "Agent cost" in out
-    assert "0.000175" in out or "0.0002" in out
+    assert "$0.00" in out
     assert "Estimated value" in out
     assert "Next: add work_item_id" in out
 
@@ -47,5 +47,5 @@ def test_card_uses_stored_savings_even_when_zero():
     run = generate_synthetic_run(seed=1)
     run["estimated_savings_usd"] = 0.0
     out = render_roi_card(run, color=False, unicode=True)
-    # Should display +$0.0000 since stored value is 0.0
-    assert "+$0.0000" in out
+    # Should display +$0.00 since stored value is 0.0
+    assert "+$0.00" in out

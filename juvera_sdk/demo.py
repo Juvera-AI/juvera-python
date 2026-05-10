@@ -128,7 +128,7 @@ def render_roi_card(
     pct = (savings / baseline_cost * 100) if baseline_cost else 0.0
     time_saved = baseline_time * (savings / baseline_cost) if baseline_cost else 0.0
 
-    saved_label = f"+${savings:.4f}  ({pct:.3f}% cost reduction)"
+    saved_label = f"+${savings:.2f}  ({pct:.2f}% cost reduction)"
     if color:
         saved_label = f"{_GREEN}{saved_label}{_RESET}"
     next_line = "Next: add work_item_id to verify against real outcomes."
@@ -145,7 +145,7 @@ def render_roi_card(
     lines.append(f"  {arrow} Agent responded in {run['duration_ms'] / 1000:.1f}s")
     lines.append(
         f"  {arrow} Tokens: {run['input_tokens']} in / {run['output_tokens']} out {dot} "
-        f"{run['model']} {dot} ${agent_cost:.4f}"
+        f"{run['model']} {dot} ${agent_cost:.2f}"
     )
     lines.append("")
 
@@ -165,7 +165,7 @@ def render_roi_card(
         _row(),
         _row(f"Workflow:        {run['workflow_type']}"),
         _row(f"Human baseline:  ${baseline_cost:.2f} {dot} {baseline_time} min"),
-        _row(f"Agent cost:      ${agent_cost:.4f}"),
+        _row(f"Agent cost:      ${agent_cost:.2f}"),
         _row(f"Estimated value: {saved_label}"),
         _row(f"Time saved:      {time_saved:.1f} min"),
         _row("Readiness:       provisional"),

@@ -28,7 +28,7 @@
 
   <div class="hero">
     <div>{{ total_runs }} agent run{{ "s" if total_runs != 1 else "" }} captured · {{ window_label }}</div>
-    <div class="hero-savings">+${{ "%.4f"|format(total_savings) }} estimated savings</div>
+    <div class="hero-savings">+${{ "%.2f"|format(total_savings) }} estimated savings</div>
     <div>Top workflow: <strong>{{ top_workflow }}</strong></div>
   </div>
 
@@ -41,8 +41,8 @@
       <tr>
         <td>{{ row.workflow_type }}</td>
         <td>{{ row.runs }}</td>
-        <td>${{ "%.4f"|format(row.agent_cost) }}</td>
-        <td>+${{ "%.4f"|format(row.savings) }}</td>
+        <td>${{ "%.2f"|format(row.agent_cost) }}</td>
+        <td>+${{ "%.2f"|format(row.savings) }}</td>
         <td><div class="bar"><div class="bar-fill"
             style="width: {{ row.attribution_pct }}%"></div></div>
             {{ "%.0f"|format(row.attribution_pct) }}%</td>
@@ -84,7 +84,7 @@
         <td>{{ r.agent_id }}</td>
         <td>{{ r.model }}</td>
         <td>{{ r.input_tokens }} / {{ r.output_tokens }}</td>
-        <td>${{ "%.4f"|format(r.agent_cost_usd) }}</td>
+        <td>${{ "%.2f"|format(r.agent_cost_usd) }}</td>
         <td>{{ r.status }}</td>
       </tr>
     {% endfor %}
