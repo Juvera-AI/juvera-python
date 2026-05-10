@@ -44,6 +44,25 @@ def test_token_count_normalization(attach_setup):
     assert attrs["gen_ai.usage.output_tokens"] == 200
 
 
+def test_ai_operational_metric_normalization(attach_setup):
+    provider, exporter = attach_setup
+    tracer = provider.get_tracer("phoenix")
+    with tracer.start_as_current_span("llm.call") as span:
+        span.set_attribute("gen_ai.response.duration_ms", 812)
+        span.set_attribute("llm.context_window.limit_tokens", 128000)
+        span.set_attribute("llm.context_window.used_tokens", 4212)
+        span.set_attribute("llm.context_window.truncated", True)
+        span.set_attribute("llm.timeout", True)
+        span.set_attribute("llm.prompt.malformed", True)
+    attrs = dict(exporter.last_span().attributes)
+    assert attrs["juvera.latency_ms"] == 812
+    assert attrs["juvera.context_window.limit_tokens"] == 128000
+    assert attrs["juvera.context_window.used_tokens"] == 4212
+    assert attrs["juvera.context_window.truncated"] is True
+    assert attrs["juvera.timeout"] is True
+    assert attrs["juvera.prompt.malformed"] is True
+
+
 def test_no_normalization_passes_through(attach_setup):
     provider, exporter = attach_setup
     tracer = provider.get_tracer("test")

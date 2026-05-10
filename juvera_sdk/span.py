@@ -42,6 +42,36 @@ class AgentSpan:
     def set_completion(self, text: str) -> None:
         self._span.set_attribute("gen_ai.completion", text)
 
+    def set_latency(self, latency_ms: int | float) -> None:
+        self._span.set_attribute("juvera.latency_ms", latency_ms)
+        self._span.set_attribute("gen_ai.response.duration_ms", latency_ms)
+
+    def set_context_window(
+        self,
+        *,
+        used_tokens: int | None = None,
+        limit_tokens: int | None = None,
+        truncated: bool | None = None,
+        limit_exceeded: bool | None = None,
+    ) -> None:
+        if used_tokens is not None:
+            self._span.set_attribute("juvera.context_window.used_tokens", int(used_tokens))
+        if limit_tokens is not None:
+            self._span.set_attribute("juvera.context_window.limit_tokens", int(limit_tokens))
+        if truncated is not None:
+            self._span.set_attribute("juvera.context_window.truncated", bool(truncated))
+        if limit_exceeded is not None:
+            self._span.set_attribute("juvera.context_window.limit_exceeded", bool(limit_exceeded))
+
+    def mark_timeout(self, timeout: bool = True) -> None:
+        self._span.set_attribute("juvera.timeout", bool(timeout))
+
+    def mark_malformed_prompt(self, malformed: bool = True) -> None:
+        self._span.set_attribute("juvera.prompt.malformed", bool(malformed))
+
+    def set_routing_decision(self, decision: str) -> None:
+        self._span.set_attribute("juvera.routing.decision", decision)
+
     def add_context_source(
         self,
         name: str,

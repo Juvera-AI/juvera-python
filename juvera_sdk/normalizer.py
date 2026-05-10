@@ -21,6 +21,16 @@ ATTRIBUTE_MAP: dict[str, str] = {
     # Braintrust conventions
     "braintrust.input": "gen_ai.prompt",
     "braintrust.output": "gen_ai.completion",
+    # AI production metrics used by Juvera's episode/judge surfaces.
+    "gen_ai.response.duration_ms": "juvera.latency_ms",
+    "llm.latency_ms": "juvera.latency_ms",
+    "langfuse.latency_ms": "juvera.latency_ms",
+    "braintrust.latency_ms": "juvera.latency_ms",
+    "llm.context_window.limit_tokens": "juvera.context_window.limit_tokens",
+    "llm.context_window.used_tokens": "juvera.context_window.used_tokens",
+    "llm.context_window.truncated": "juvera.context_window.truncated",
+    "llm.timeout": "juvera.timeout",
+    "llm.prompt.malformed": "juvera.prompt.malformed",
 }
 
 

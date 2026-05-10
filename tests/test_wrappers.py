@@ -37,12 +37,25 @@ class _OpenAICompletions:
         return _OpenAIResponse()
 
 
+class _TimeoutOpenAICompletions:
+    def create(self, **kwargs):
+        raise TimeoutError("request timed out")
+
+
 class _OpenAIChat:
     completions = _OpenAICompletions()
 
 
 class _OpenAIClient:
     chat = _OpenAIChat()
+
+
+class _TimeoutOpenAIChat:
+    completions = _TimeoutOpenAICompletions()
+
+
+class _TimeoutOpenAIClient:
+    chat = _TimeoutOpenAIChat()
 
 
 class _AnthropicUsage:
@@ -92,6 +105,8 @@ def test_wrap_openai_creates_span_from_workflow_context(sdk_init):
             client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "Can I get a refund?"}],
+                max_tokens=64,
+                timeout=3,
             )
 
     span = exporter.last_span()
@@ -104,10 +119,40 @@ def test_wrap_openai_creates_span_from_workflow_context(sdk_init):
     assert attrs["juvera.properties.subject_key"] == "customer_42"
     assert attrs["gen_ai.prompt"] == "Can I get a refund?"
     assert attrs["gen_ai.request.model"] == "gpt-4o-mini"
+    assert attrs["gen_ai.request.max_tokens"] == 64
+    assert attrs["juvera.request.timeout_seconds"] == 3.0
+    assert attrs["juvera.routing.decision"] == "openai"
     assert attrs["gen_ai.usage.input_tokens"] == 42
     assert attrs["gen_ai.usage.output_tokens"] == 9
+    assert attrs["juvera.context_window.requested_output_tokens"] == 64
+    assert attrs["juvera.context_window.used_tokens"] == 51
+    assert attrs["juvera.latency_ms"] >= 0
+    assert attrs["gen_ai.response.duration_ms"] >= 0
     assert attrs["juvera.instrumentation_readiness"] == "attribution_ready"
     assert span.events[0].attributes["tool.name"] == "lookup_policy"
+
+
+def test_wrap_openai_marks_timeout_and_malformed_prompt(sdk_init):
+    exporter = sdk_init
+    client = j.wrap_openai(
+        _TimeoutOpenAIClient(),
+        agent_id="support_agent",
+        default_workflow_type="ticket_deflection",
+    )
+
+    with pytest.raises(TimeoutError):
+        with j.workflow(work_item_id="wi_timeout", workflow_type="ticket_deflection"):
+            client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[],
+                timeout=0.1,
+            )
+
+    attrs = exporter.last_span().attributes
+    assert attrs["juvera.timeout"] is True
+    assert attrs["juvera.prompt.malformed"] is True
+    assert attrs["juvera.request.timeout_seconds"] == 0.1
+    assert attrs["juvera.routing.decision"] == "openai"
 
 
 def test_wrap_anthropic_reuses_existing_agent_span(sdk_init):

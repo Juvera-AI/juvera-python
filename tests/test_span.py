@@ -43,6 +43,27 @@ def test_agent_span_set_tokens(sdk_init):
     assert attrs["gen_ai.usage.output_tokens"] == 180
 
 
+def test_agent_span_sets_ai_operational_metrics(sdk_init):
+    exporter = sdk_init
+    with j.agent_span(agent_id="agent_01", work_item_id="wi_metrics") as span:
+        span.set_latency(812)
+        span.set_context_window(used_tokens=4212, limit_tokens=128000, truncated=False, limit_exceeded=False)
+        span.mark_malformed_prompt(True)
+        span.mark_timeout(True)
+        span.set_routing_decision("openai-primary")
+
+    attrs = exporter.last_span().attributes
+    assert attrs["juvera.latency_ms"] == 812
+    assert attrs["gen_ai.response.duration_ms"] == 812
+    assert attrs["juvera.context_window.used_tokens"] == 4212
+    assert attrs["juvera.context_window.limit_tokens"] == 128000
+    assert attrs["juvera.context_window.truncated"] is False
+    assert attrs["juvera.context_window.limit_exceeded"] is False
+    assert attrs["juvera.prompt.malformed"] is True
+    assert attrs["juvera.timeout"] is True
+    assert attrs["juvera.routing.decision"] == "openai-primary"
+
+
 def test_agent_span_add_tool_call(sdk_init):
     exporter = sdk_init
     with j.agent_span(agent_id="agent_01", work_item_id="wi_004") as span:
