@@ -588,6 +588,30 @@ def _ingest_headers(config: RelayConfig) -> dict[str, str]:
     return headers
 
 
+def _try_upload_capture(
+    *, endpoint: str, api_key: str, org_id: str,
+    payload: dict[str, Any], timeout: float = 5.0,
+) -> bool:
+    """Best-effort POST to ingest. Logs warning on failure; never raises."""
+    import logging
+    import httpx as _httpx
+    log = logging.getLogger(__name__)
+    try:
+        with _httpx.Client(timeout=timeout) as client:
+            r = client.post(
+                f"{endpoint.rstrip('/')}/v1/traces",
+                headers={"X-API-Key": api_key, "X-Org-Id": org_id},
+                json=payload,
+            )
+            if r.status_code >= 400:
+                log.warning("juvera upload returned %s; capture stays local", r.status_code)
+                return False
+            return True
+    except _httpx.HTTPError as e:
+        log.warning("juvera upload failed (%s); capture stays local", type(e).__name__)
+        return False
+
+
 def _bootstrap_setup_context(config: RelayConfig) -> None:
     if not config.setup_token:
         return
