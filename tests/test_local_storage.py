@@ -51,3 +51,30 @@ def test_read_captures_skips_corrupt_lines(tmp_path, monkeypatch):
     p.write_text('{"event_id": "good1"}\n{not valid json\n{"event_id": "good2"}\n')
     events = list(read_captures())
     assert {e["event_id"] for e in events} == {"good1", "good2"}
+
+
+def test_read_captures_since_date_filter(tmp_path, monkeypatch):
+    """since_date excludes files in date directories older than the cutoff."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    old = capture_path_for(source="demo", run_id="01OLD", date="2026-04-01")
+    new = capture_path_for(source="demo", run_id="01NEW", date="2026-05-01")
+    write_capture_event(old, {"event_id": "e_old"})
+    write_capture_event(new, {"event_id": "e_new"})
+
+    events = list(read_captures(since_date="2026-05-01"))
+    assert {e["event_id"] for e in events} == {"e_new"}, events
+
+
+def test_read_captures_source_filter(tmp_path, monkeypatch):
+    """source filter excludes files whose name doesn't start with that prefix."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    demo = capture_path_for(source="demo", run_id="01D", date="2026-05-01")
+    cap = capture_path_for(source="capture", run_id="01C", date="2026-05-01")
+    write_capture_event(demo, {"event_id": "e_demo"})
+    write_capture_event(cap, {"event_id": "e_capture"})
+
+    only_demo = list(read_captures(source="demo"))
+    assert {e["event_id"] for e in only_demo} == {"e_demo"}
+
+    only_capture = list(read_captures(source="capture"))
+    assert {e["event_id"] for e in only_capture} == {"e_capture"}
