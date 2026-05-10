@@ -46,16 +46,27 @@ def estimate_roi(
 ) -> dict[str, Any] | None:
     """Estimate ROI using workflow baselines.
 
-    Reads workflow_type from ContextVar if not passed explicitly.
-    Returns None with a warning if workflow_type is unknown.
+    Works with or without j.init(). When uninitialized, uses default
+    WORKFLOW_BASELINES and skips ContextVar-based workflow_type inference.
+    Reads workflow_type from ContextVar only when an SDK config exists.
+    Returns None with a warning if workflow_type is unknown or unresolvable.
     """
     from juvera_sdk import _get_config
 
     _ctx = importlib.import_module("juvera_sdk.context")
 
-    config = _get_config()
+    # Tolerate uninitialized SDK: _get_config() may raise; treat as no-config.
+    try:
+        config = _get_config()
+    except Exception:
+        config = None
 
-    eff_workflow_type = workflow_type or _ctx.get_workflow_type()
+    if workflow_type is not None:
+        eff_workflow_type = workflow_type
+    elif config is not None:
+        eff_workflow_type = _ctx.get_workflow_type()
+    else:
+        eff_workflow_type = None
 
     if eff_workflow_type is None:
         warnings.warn(
@@ -66,7 +77,7 @@ def estimate_roi(
         return None
 
     baselines = dict(WORKFLOW_BASELINES)
-    if config.workflow_baselines:
+    if config is not None and getattr(config, "workflow_baselines", None):
         baselines.update(config.workflow_baselines)
 
     baseline = baselines.get(eff_workflow_type)
@@ -82,7 +93,6 @@ def estimate_roi(
     baseline_cost = baseline["human_cost_usd"]
     baseline_time = baseline["human_time_minutes"]
 
-    # Auto-compute agent cost from current span's model + tokens if not provided
     if agent_cost_usd is None:
         cost = _auto_compute_agent_cost()
     else:
@@ -91,9 +101,9 @@ def estimate_roi(
     time_saved = baseline_time * (savings / baseline_cost) if baseline_cost > 0 else 0.0
 
     return {
-        "estimated_savings_usd": round(savings, 2),
+        "estimated_savings_usd": round(savings, 6),
         "baseline_cost_usd": baseline_cost,
-        "agent_cost_usd": round(cost, 4),
-        "time_saved_minutes": round(time_saved, 1),
+        "agent_cost_usd": round(cost, 6),
+        "time_saved_minutes": round(time_saved, 6),
         "workflow_type": eff_workflow_type,
     }

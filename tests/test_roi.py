@@ -84,8 +84,8 @@ def test_estimate_roi_auto_cost_from_span(sdk_init):
         span.set_tokens(input=420, output=180)
         roi = j.estimate_roi()
     # gpt-4o-mini: 420 * 0.15/1M + 180 * 0.60/1M = 0.000063 + 0.000108 = 0.000171
-    assert roi["agent_cost_usd"] == 0.0002  # rounded to 4 decimals
-    assert roi["estimated_savings_usd"] == 22.0  # 22.0 - 0.0002 rounds to 22.0
+    assert roi["agent_cost_usd"] == 0.000171  # rounded to 6 decimals for sub-cent accuracy
+    assert abs(roi["estimated_savings_usd"] - 21.999829) < 0.000001
     assert roi["workflow_type"] == "ticket_deflection"
 
 
