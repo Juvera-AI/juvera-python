@@ -261,7 +261,18 @@ def main() -> int:
     _add_config_subparser(subparsers)
 
     args = parser.parse_args()
-    return args.func(args)
+    rc = args.func(args)
+
+    # After primary command output: bump local counter and (only on first run) prompt for consent.
+    # Both wrapped in try/except so telemetry never breaks the user's command.
+    try:
+        from juvera_sdk.telemetry import increment_counter, maybe_prompt_consent
+        increment_counter(args.command)
+        maybe_prompt_consent()
+    except Exception:
+        pass
+
+    return rc
 
 
 if __name__ == "__main__":

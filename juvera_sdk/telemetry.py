@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,3 +117,44 @@ def build_flags_used(command: str, args) -> list[str]:
     """
     allow = _FLAG_ALLOWLIST.get(command, {})
     return [name for name, predicate in allow.items() if predicate(args)]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Consent prompt (Task 7.3) — deferred until AFTER primary command output
+# ──────────────────────────────────────────────────────────────────────────────
+
+_PROMPT_TEXT = """
+Help improve Juvera? Share anonymous usage stats:
+  juvera version, OS/arch, command name, outcome/duration, allowlisted flag names only.
+Never sent: prompts, completions, file paths, API keys, flag values, costs, workflow types.
+Schema: https://juvera.ai/telemetry-schema
+
+Enable? [y/N] (change anytime: juvera config set telemetry false)
+"""
+
+
+def maybe_prompt_consent() -> None:
+    """Show the consent prompt on first run. No-op if already prompted.
+
+    Must be called AFTER the primary command output has been printed and stdout
+    flushed, so the ROI card / report path / banner is the first thing the user sees.
+    """
+    from juvera_sdk.user_config import load_config, set_value
+
+    cfg = load_config()
+    if cfg.get("prompted"):
+        return
+
+    if not sys.stdin.isatty():
+        # Non-interactive (CI, piped): default to disabled, mark as prompted.
+        set_value("prompted", True)
+        return
+
+    print(_PROMPT_TEXT)
+    try:
+        answer = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    enabled = answer in ("y", "yes")
+    set_value("telemetry", enabled)
+    set_value("prompted", True)
