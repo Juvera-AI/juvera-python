@@ -129,6 +129,11 @@ def _normalize_otlp_envelope_to_events(
                     attrs.get("juvera.work_item_id")
                     or attrs.get("work_item_id")
                 )
+                # Treat auto-generated work_item_ids as missing — they don't represent
+                # real attribution. The flag is emitted by agent_span() when no explicit
+                # work_item_id is passed.
+                if attrs.get("juvera.work_item_auto_generated"):
+                    work_item_id = None
                 model = (
                     attrs.get("gen_ai.request.model")
                     or attrs.get("juvera.model")

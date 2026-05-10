@@ -115,3 +115,41 @@ def test_otlp_error_status_marks_event_error():
     events = list(_normalize_otlp_envelope_to_events(envelope))
     assert events[0]["status"] == "error"
     assert events[0]["error"] == "boom"
+
+
+def test_auto_generated_work_item_id_treated_as_missing():
+    """SDK auto-generated work_item_ids must not count as real attribution."""
+    envelope = {
+        "resourceSpans": [{"scopeSpans": [{"spans": [{
+            "spanId": "auto1",
+            "startTimeUnixNano": "0", "endTimeUnixNano": "1000000",
+            "status": {"code": 1},
+            "attributes": [
+                {"key": "juvera.agent_id", "value": {"stringValue": "support_agent"}},
+                {"key": "juvera.work_item_id", "value": {"stringValue": "auto-uuid-123"}},
+                {"key": "juvera.work_item_auto_generated", "value": {"boolValue": True}},
+            ],
+        }]}]}],
+    }
+    events = list(_normalize_otlp_envelope_to_events(envelope))
+    assert len(events) == 1
+    # Auto-generated → reported as None so report's attribution check fails (correct).
+    assert events[0]["work_item_id"] is None
+
+
+def test_explicit_work_item_id_preserved():
+    """Explicit work_item_id (no auto-generated flag) must be preserved as-is."""
+    envelope = {
+        "resourceSpans": [{"scopeSpans": [{"spans": [{
+            "spanId": "explicit1",
+            "startTimeUnixNano": "0", "endTimeUnixNano": "1000000",
+            "status": {"code": 1},
+            "attributes": [
+                {"key": "juvera.agent_id", "value": {"stringValue": "support_agent"}},
+                {"key": "juvera.work_item_id", "value": {"stringValue": "wi_ZD123"}},
+                # NO auto_generated flag → explicit
+            ],
+        }]}]}],
+    }
+    events = list(_normalize_otlp_envelope_to_events(envelope))
+    assert events[0]["work_item_id"] == "wi_ZD123"

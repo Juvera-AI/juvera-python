@@ -265,22 +265,25 @@ def main() -> int:
     t0 = time.monotonic()
     rc = args.func(args)
 
-    # After primary command output: bump local counter, prompt for consent, and send telemetry.
-    # All wrapped in try/except so telemetry never breaks the user's command.
-    try:
-        from juvera_sdk.telemetry import (
-            increment_counter, maybe_prompt_consent, send_event, build_flags_used,
-        )
-        increment_counter(args.command)
-        maybe_prompt_consent()
-        send_event(
-            command=args.command,
-            outcome="success" if rc == 0 else "error",
-            duration_ms=int((time.monotonic() - t0) * 1000),
-            flags_used=build_flags_used(args.command, args),
-        )
-    except Exception:
-        pass
+    # Skip telemetry for the config command — it manages telemetry itself,
+    # and a deferred consent prompt could overwrite a value the user just set.
+    if args.command != "config":
+        # After primary command output: bump local counter, prompt for consent, and send telemetry.
+        # All wrapped in try/except so telemetry never breaks the user's command.
+        try:
+            from juvera_sdk.telemetry import (
+                increment_counter, maybe_prompt_consent, send_event, build_flags_used,
+            )
+            increment_counter(args.command)
+            maybe_prompt_consent()
+            send_event(
+                command=args.command,
+                outcome="success" if rc == 0 else "error",
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                flags_used=build_flags_used(args.command, args),
+            )
+        except Exception:
+            pass
 
     return rc
 

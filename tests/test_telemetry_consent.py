@@ -73,3 +73,35 @@ def load_config_from(tmp_path):
     if not p.is_file():
         return {}
     return json.loads(p.read_text())
+
+
+def test_config_command_does_not_show_consent_prompt(tmp_path):
+    """juvera config get/set must not append the consent prompt to stdout."""
+    env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "NO_COLOR": "1"}
+    r = subprocess.run(
+        [sys.executable, "-m", "juvera_sdk.cli", "config", "get"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    # The consent prompt text must NOT appear in stdout (would corrupt JSON)
+    assert "Help improve Juvera" not in r.stdout
+    assert "Help improve Juvera" not in r.stderr  # also not on stderr — would mislead piped users
+
+
+def test_config_set_telemetry_value_not_clobbered_by_consent(tmp_path):
+    """juvera config set telemetry true must NOT be overwritten by a consent prompt."""
+    env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "NO_COLOR": "1"}
+    # User explicitly opts in via config set
+    r = subprocess.run(
+        [sys.executable, "-m", "juvera_sdk.cli", "config", "set", "telemetry", "true"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    # Now read it back — the value must still be true (not overwritten by a deferred
+    # consent prompt that defaulted to false)
+    r = subprocess.run(
+        [sys.executable, "-m", "juvera_sdk.cli", "config", "get", "telemetry"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "true" in r.stdout.lower()
