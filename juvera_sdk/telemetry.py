@@ -63,3 +63,56 @@ def increment_counter(command: str) -> None:
     m.setdefault("counts", {})[command] = m["counts"].get(command, 0) + 1
     m.setdefault("last_used", {})[command] = now
     _atomic_write(m)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Per-command flag allowlist (Task 7.2)
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Per-command allowlist of flag presence indicators that may appear in telemetry.
+# Values are NEVER transmitted; only the boolean presence as the listed name.
+# Adding a new flag to the CLI without updating this list = silently excluded.
+
+from typing import Callable
+
+_FLAG_ALLOWLIST: dict[str, dict[str, Callable]] = {
+    "demo": {
+        "no_save":      lambda ns: bool(getattr(ns, "no_save", False)),
+        "live":         lambda ns: bool(getattr(ns, "live", False)),
+        "seed_set":     lambda ns: getattr(ns, "seed", None) is not None,
+        "workflow_set": lambda ns: getattr(ns, "workflow", "ticket_deflection") != "ticket_deflection",
+    },
+    "listen": {
+        "local":        lambda ns: bool(getattr(ns, "local", False)),
+        "cloud_set":    lambda ns: bool(getattr(ns, "api_key", None)),
+        "port_default": lambda ns: getattr(ns, "port", 4318) == 4318,
+    },
+    "report": {
+        "format_set":   lambda ns: getattr(ns, "format", "html") != "html",
+        "source_set":   lambda ns: getattr(ns, "source", "all") != "all",
+        "since_set":    lambda ns: getattr(ns, "since", "30d") != "30d",
+        "no_open":      lambda ns: bool(getattr(ns, "no_open", False)),
+        "output_set":   lambda ns: getattr(ns, "output", None) is not None,
+    },
+    "doctor": {
+        "scan_ports":   lambda ns: bool(getattr(ns, "scan_ports", False)),
+    },
+    "validate": {},
+    "patch": {
+        "cwd_set":      lambda ns: getattr(ns, "cwd", ".") != ".",
+    },
+    "config": {
+        "key_set":      lambda ns: getattr(ns, "key", None) is not None,
+    },
+}
+
+
+def build_flags_used(command: str, args) -> list[str]:
+    """Return list of allowlisted flag presence names for the given command.
+
+    Flag values are NEVER included. Names not in the allowlist are silently
+    excluded (defense in depth — adding a new flag without updating the
+    allowlist results in it being dropped from telemetry rather than leaked).
+    """
+    allow = _FLAG_ALLOWLIST.get(command, {})
+    return [name for name, predicate in allow.items() if predicate(args)]
