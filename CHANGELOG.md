@@ -7,6 +7,29 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.2.0] — 2026-05-10
+
+### Added
+- `juvera demo` — synthetic ticket-deflection agent run + styled ROI card. Pure local; no API key, no account. Flags: `--no-save`, `--workflow`, `--seed`, `--live` (deferred warning).
+- `juvera report` — self-contained HTML ROI report (Jinja2, autoescape on) generated from local NDJSON captures; auto-opens in browser. `--format md` available; `--since 24h/7d/30d/all` with hour-precision; `--source demo|capture|all`.
+- `juvera config get/set/unset` — read/write `~/.juvera/config.json`. `install_id` is system-managed and rejected by `set`.
+- `juvera listen` — keyless mode is now the default (writes to `~/.juvera/captures/<date>/` only). Cloud upload requires `JUVERA_API_KEY`. New `--local` flag forces local-only even if env key is set. Mandatory startup banner shows the active mode.
+- `from juvera_sdk import estimate_roi` — pure, callable without `j.init()`. Falls back to default `WORKFLOW_BASELINES`.
+- Local NDJSON storage layer at `~/.juvera/captures/<date>/<source>-<ulid>.ndjson`.
+- Opt-in anonymous telemetry: consent prompt deferred until **after** the primary command output. Strict per-command flag allowlist; flag values are never transmitted. Sender no-ops when no endpoint is configured.
+- Local metrics counters at `~/.juvera/metrics.json` (always-on, never sent unless opted in).
+- Pricing catalog vendored inside the SDK package (`juvera_sdk/data/model_pricing.json`); `compute_token_cost_usd()` now works from a wheel install.
+
+### Changed
+- `estimate_roi()` rounds to 6 decimal places (was 2) so sub-cent costs from cheap models are preserved internally. User-visible `$` and `%` formatting in the demo card and HTML report uses 2 decimal places.
+- `juvera listen` upload path is best-effort: network failures log a warning and the relay continues capturing locally rather than crashing. New `_try_upload_capture()` helper.
+
+### Packaging
+- `MANIFEST.in` now includes `juvera_sdk/templates/*.j2` and `juvera_sdk/data/*.json`.
+- `pyproject.toml [tool.setuptools.package-data]` includes the same.
+- New runtime dependency: `jinja2>=3.0,<4.0`.
+- New dev dependency: `build>=1.0` (for `test_packaging.py` and `test_wheel_install_e2e.py`).
+
 ## [0.1.6] — 2026-03-24
 
 ### Added
