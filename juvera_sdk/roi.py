@@ -55,10 +55,10 @@ def estimate_roi(
 
     _ctx = importlib.import_module("juvera_sdk.context")
 
-    # Tolerate uninitialized SDK: _get_config() may raise; treat as no-config.
+    # Tolerate uninitialized SDK: _get_config() raises RuntimeError when init() hasn't been called.
     try:
         config = _get_config()
-    except Exception:
+    except RuntimeError:
         config = None
 
     if workflow_type is not None:
@@ -77,7 +77,7 @@ def estimate_roi(
         return None
 
     baselines = dict(WORKFLOW_BASELINES)
-    if config is not None and getattr(config, "workflow_baselines", None):
+    if config is not None and config.workflow_baselines:
         baselines.update(config.workflow_baselines)
 
     baseline = baselines.get(eff_workflow_type)
