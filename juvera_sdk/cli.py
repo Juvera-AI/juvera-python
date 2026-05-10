@@ -65,6 +65,71 @@ def _add_demo_subparser(subparsers) -> None:
     demo.set_defaults(func=run_demo)
 
 
+def _since_to_date(since: str) -> str | None:
+    """Convert '24h'|'7d'|'30d'|'all' to a YYYY-MM-DD cutoff (inclusive)."""
+    from datetime import timedelta
+    if since == "all":
+        return None
+    n_str, unit = since[:-1], since[-1]
+    n = int(n_str)
+    delta = {"h": timedelta(hours=n), "d": timedelta(days=n)}[unit]
+    cutoff = datetime.now(timezone.utc) - delta
+    return cutoff.strftime("%Y-%m-%d")
+
+
+def run_report(args) -> int:
+    import webbrowser
+    from pathlib import Path
+    from juvera_sdk.local_storage import read_captures, reports_root
+    from juvera_sdk.report import filter_events, render_html, build_report_context
+
+    since_date = _since_to_date(args.since)
+    source = None if args.source == "all" else args.source
+    events = list(filter_events(
+        read_captures(since_date=since_date, source=source),
+        since_date=since_date,
+        source=source,
+    ))
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    if args.format == "md":
+        ctx = build_report_context(events, window_label=f"last {args.since}")
+        content = (
+            f"# Juvera ROI Report\n\n"
+            f"Generated {ctx['generated_at']}\n\n"
+            f"- Total runs: {ctx['total_runs']}\n"
+            f"- Total estimated savings: +${ctx['total_savings']:.4f}\n"
+            f"- Top workflow: {ctx['top_workflow']}\n"
+            f"- Unattributed: {ctx['unattributed_runs']}\n"
+        )
+        out = args.output or str(reports_root() / f"{today}-report.md")
+    else:
+        content = render_html(events, window_label=f"last {args.since}")
+        out = args.output or str(reports_root() / f"{today}-report.html")
+
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(content, encoding="utf-8")
+
+    print(f"Report written to {out}")
+    if args.format == "html" and not args.no_open:
+        try:
+            webbrowser.open(f"file://{out}")
+        except Exception:
+            pass
+    return 0
+
+
+def _add_report_subparser(subparsers) -> None:
+    rep = subparsers.add_parser("report", help="Render an HTML ROI report from local captures.")
+    rep.add_argument("--since", default="30d", help="Time window: '24h', '7d', '30d', 'all'.")
+    rep.add_argument("--source", choices=["demo", "capture", "all"], default="all")
+    rep.add_argument("--format", choices=["html", "md"], default="html")
+    rep.add_argument("--output", default=None, help="Override output file path.")
+    rep.add_argument("--no-open", action="store_true", help="Skip auto-open in browser.")
+    rep.set_defaults(func=run_report)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="juvera")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -96,6 +161,7 @@ def main() -> int:
     patch.set_defaults(func=run_patch)
 
     _add_demo_subparser(subparsers)
+    _add_report_subparser(subparsers)
 
     args = parser.parse_args()
     return args.func(args)
