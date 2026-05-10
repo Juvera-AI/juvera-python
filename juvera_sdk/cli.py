@@ -155,6 +155,75 @@ def _add_report_subparser(subparsers) -> None:
     rep.set_defaults(func=run_report)
 
 
+def _coerce(value: str, expected_type) -> object:
+    """Coerce a CLI string argument to the expected Python type."""
+    if expected_type is bool:
+        if value.lower() in ("true", "1", "yes", "on"):
+            return True
+        if value.lower() in ("false", "0", "no", "off"):
+            return False
+        raise ValueError(f"Expected bool, got {value!r}")
+    if isinstance(expected_type, tuple) and str in expected_type:
+        return value
+    if expected_type is str:
+        return value
+    raise ValueError(f"Cannot coerce to {expected_type}")
+
+
+def run_config(args) -> int:
+    import json as _json
+    from juvera_sdk.user_config import (
+        load_config, get_value, set_value, unset_value,
+        SCHEMA, InvalidConfigKey, InvalidConfigType,
+    )
+    if args.op == "get":
+        if args.key is None:
+            print(_json.dumps(load_config(), indent=2, sort_keys=True))
+        else:
+            try:
+                print(_json.dumps(get_value(args.key)))
+            except InvalidConfigKey as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 2
+        return 0
+    if args.op == "set":
+        if args.key not in SCHEMA:
+            print(f"error: Unknown config key: {args.key!r}", file=sys.stderr)
+            return 2
+        try:
+            coerced = _coerce(args.value, SCHEMA[args.key]["type"])
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        try:
+            set_value(args.key, coerced)
+        except (InvalidConfigKey, InvalidConfigType) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        return 0
+    if args.op == "unset":
+        try:
+            unset_value(args.key)
+        except InvalidConfigKey as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        return 0
+    return 1
+
+
+def _add_config_subparser(subparsers) -> None:
+    cfg = subparsers.add_parser("config", help="Read/write ~/.juvera/config.json keys.")
+    cfg_sub = cfg.add_subparsers(dest="op", required=True)
+    g = cfg_sub.add_parser("get", help="Print one key (or all keys as JSON).")
+    g.add_argument("key", nargs="?", default=None)
+    s = cfg_sub.add_parser("set", help="Set a key to a value.")
+    s.add_argument("key")
+    s.add_argument("value")
+    u = cfg_sub.add_parser("unset", help="Reset a key to its default.")
+    u.add_argument("key")
+    cfg.set_defaults(func=run_config)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="juvera")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -187,6 +256,7 @@ def main() -> int:
 
     _add_demo_subparser(subparsers)
     _add_report_subparser(subparsers)
+    _add_config_subparser(subparsers)
 
     args = parser.parse_args()
     return args.func(args)
