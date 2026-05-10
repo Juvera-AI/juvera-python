@@ -46,6 +46,7 @@ dev = [
   "pytest>=8.0",
   "respx>=0.21",
   "pytest-asyncio>=0.23",
+  "build>=1.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -58,3 +59,6 @@ include = ["juvera_sdk*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "slow: tests that build wheels or create venvs (5-30s each)",
+]
