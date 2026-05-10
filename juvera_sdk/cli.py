@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+from datetime import datetime, timezone
 
 from juvera_sdk.local_relay import (
     DEFAULT_HOST,
@@ -13,6 +15,43 @@ from juvera_sdk.local_relay import (
     run_patch,
     run_validate,
 )
+
+
+def _should_use_color() -> bool:
+    return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def _should_use_unicode() -> bool:
+    return "UTF-8" in os.environ.get("LANG", "") or sys.stdout.encoding.lower().startswith("utf")
+
+
+def run_demo(args) -> int:
+    from juvera_sdk.demo import generate_synthetic_run, render_roi_card
+    from juvera_sdk.local_storage import capture_path_for, write_capture_event
+
+    run = generate_synthetic_run(workflow_type=args.workflow, seed=args.seed)
+    if not args.no_save:
+        path = capture_path_for(source="demo", run_id=run["event_id"])
+        event = {**run}
+        event["captured_at"] = datetime.now(timezone.utc).isoformat()
+        event.pop("_user_message", None)
+        write_capture_event(path, event)
+
+    print(render_roi_card(run, color=_should_use_color(), unicode=_should_use_unicode()))
+    sys.stdout.flush()
+    return 0
+
+
+def _add_demo_subparser(subparsers) -> None:
+    demo = subparsers.add_parser("demo", help="Simulate one agent run and print an ROI card.")
+    demo.add_argument("--no-save", action="store_true", help="Don't write NDJSON.")
+    demo.add_argument("--workflow", default="ticket_deflection",
+                      help="Workflow baseline to simulate.")
+    demo.add_argument("--seed", type=int, default=None,
+                      help="Seed RNG for deterministic output.")
+    demo.add_argument("--live", action="store_true",
+                      help="If OPENAI/ANTHROPIC API key is set, hit the real model.")
+    demo.set_defaults(func=run_demo)
 
 
 def main() -> int:
@@ -44,6 +83,8 @@ def main() -> int:
     patch.add_argument("--base-url", default=f"http://{DEFAULT_HOST}:{DEFAULT_PORT}")
     patch.add_argument("--cwd", default=".")
     patch.set_defaults(func=run_patch)
+
+    _add_demo_subparser(subparsers)
 
     args = parser.parse_args()
     return args.func(args)
