@@ -107,14 +107,6 @@ def run_report(args) -> int:
         source=source,
     ))
 
-    if args.source == "capture" and not events:
-        print(
-            "  (note: --source capture matches no events yet. 'juvera listen' will start "
-            "writing local captures in v0.2.0 (Task 6.1). Use --source demo or --source all "
-            "to see existing data.)",
-            file=sys.stderr,
-        )
-
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     if args.format == "md":
@@ -148,8 +140,9 @@ def _add_report_subparser(subparsers) -> None:
     rep = subparsers.add_parser("report", help="Render an HTML ROI report from local captures.")
     rep.add_argument("--since", default="30d", help="Time window: '24h', '7d', '30d', 'all'.")
     rep.add_argument("--source", choices=["demo", "capture", "all"], default="all",
-                     help="Filter capture source. 'capture' is populated once 'juvera listen' "
-                          "writes to local storage (Task 6.1 — landing soon).")
+                     help="Filter capture source. 'demo' = synthetic runs from 'juvera demo'; "
+                          "'capture' = real spans from 'juvera listen' (SDK + proxy traffic, "
+                          "OTLP-normalized); 'all' = both (default).")
     rep.add_argument("--format", choices=["html", "md"], default="html")
     rep.add_argument("--output", default=None, help="Override output file path.")
     rep.add_argument("--no-open", action="store_true", help="Skip auto-open in browser.")

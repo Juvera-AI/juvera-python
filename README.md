@@ -54,6 +54,16 @@ juvera config get                    # see all settings
 juvera config set telemetry true     # opt in to anonymous usage stats (off by default)
 ```
 
+## Privacy & telemetry
+
+- Telemetry is **opt-in**. The first time you run any command other than `juvera config`, a one-line consent prompt appears **after** the command's primary output (so the ROI card is what you see first). Default = no; press Enter to decline.
+- `juvera config` commands never trigger the consent prompt, and they never overwrite the value you just set.
+- When opted in, telemetry sends: SDK version, OS/arch, command name, success/failure, duration, and **allowlisted flag names only** (e.g. presence of `--no-save`; the *value* of `--api-key`, `--output`, `--workflow`, etc. is never sent).
+- Telemetry NEVER sends: prompts, completions, file paths, API keys, flag values, costs, workflow types, or any data from `~/.juvera/captures/`.
+- Local metrics counters at `~/.juvera/metrics.json` are always-on but never leave your machine unless you opt in.
+- Change your mind anytime: `juvera config set telemetry false` (or `true`).
+- Schema: https://juvera.ai/telemetry-schema *(published when AWS infra lands; see issue #98)*.
+
 ---
 
 ## Detailed quickstart
@@ -143,8 +153,23 @@ For onboarding, Juvera can now sit in front of your app on loopback and prove it
 ### Start the relay
 
 ```bash
+# Default — local capture only, no account needed
+juvera listen
+# Captures land in ~/.juvera/captures/<date>/
+
+# With cloud upload — pass an API key (or set JUVERA_API_KEY in env)
 juvera listen --api-key "$JUVERA_API_KEY" --org-id "$JUVERA_ORG_ID"
+
+# Onboarding flow — setup token (uploads via X-Setup-Token)
+juvera listen --setup-token "$JUVERA_SETUP_TOKEN" --setup-id "$JUVERA_SETUP_ID"
+
+# Force local-only even when env credentials are set
+juvera listen --local
 ```
+
+The relay's mandatory startup banner shows the active mode:
+- `LOCAL CAPTURE ONLY` — no upload (default, or `--local`)
+- `LOCAL + CLOUD UPLOAD` — also uploads to `ingest.juvera.ai`
 
 The relay exposes:
 

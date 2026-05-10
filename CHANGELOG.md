@@ -13,7 +13,7 @@ Versioning: [Semantic Versioning](https://semver.org/)
 - `juvera demo` — synthetic ticket-deflection agent run + styled ROI card. Pure local; no API key, no account. Flags: `--no-save`, `--workflow`, `--seed`, `--live` (deferred warning).
 - `juvera report` — self-contained HTML ROI report (Jinja2, autoescape on) generated from local NDJSON captures; auto-opens in browser. `--format md` available; `--since 24h/7d/30d/all` with hour-precision; `--source demo|capture|all`.
 - `juvera config get/set/unset` — read/write `~/.juvera/config.json`. `install_id` is system-managed and rejected by `set`.
-- `juvera listen` — keyless mode is now the default (writes to `~/.juvera/captures/<date>/` only). Cloud upload requires `JUVERA_API_KEY`. New `--local` flag forces local-only even if env key is set. Mandatory startup banner shows the active mode.
+- `juvera listen` — keyless mode is now the default (writes to `~/.juvera/captures/<date>/` only). Cloud upload requires `JUVERA_API_KEY` (or `JUVERA_SETUP_TOKEN` / `--setup-token` for onboarding). New `--local` flag forces local-only even if either credential is set; setup-token bootstrap is skipped when `--local` is set so the relay doesn't depend on the API base URL being reachable. Mandatory startup banner shows the active mode.
 - `from juvera_sdk import estimate_roi` — pure, callable without `j.init()`. Falls back to default `WORKFLOW_BASELINES`.
 - Local NDJSON storage layer at `~/.juvera/captures/<date>/<source>-<ulid>.ndjson`.
 - Opt-in anonymous telemetry: consent prompt deferred until **after** the primary command output. Strict per-command flag allowlist; flag values are never transmitted. Sender no-ops when no endpoint is configured.
