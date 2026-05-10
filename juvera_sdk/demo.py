@@ -48,7 +48,14 @@ def generate_synthetic_run(
 ) -> dict[str, Any]:
     """Produce one synthetic agent-run dict suitable for write_capture_event()."""
     if workflow_type not in _SCENARIOS:
-        if workflow_type not in WORKFLOW_BASELINES:
+        if workflow_type in WORKFLOW_BASELINES:
+            warnings.warn(
+                f"No synthetic scenario for workflow_type={workflow_type!r} yet; "
+                f"falling back to ticket_deflection. (workflow exists in baselines but "
+                f"a synthetic scenario hasn't been authored)",
+                stacklevel=2,
+            )
+        else:
             warnings.warn(
                 f"Unknown workflow_type={workflow_type!r}; "
                 f"falling back to ticket_deflection.",

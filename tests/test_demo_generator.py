@@ -29,3 +29,14 @@ def test_unknown_workflow_falls_back_to_ticket_deflection_with_warning():
         run = generate_synthetic_run(workflow_type="not_real", seed=1)
     assert run["workflow_type"] == "ticket_deflection"
     assert any("not_real" in str(wi.message) for wi in w)
+
+
+def test_known_baseline_no_scenario_falls_back_with_warning():
+    """Workflow that's in WORKFLOW_BASELINES but not in _SCENARIOS still warns + falls back."""
+    import warnings
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        run = generate_synthetic_run(workflow_type="code_review", seed=1)
+    assert run["workflow_type"] == "ticket_deflection"
+    assert any("code_review" in str(wi.message) for wi in w)
+    assert any("scenario" in str(wi.message).lower() for wi in w)
