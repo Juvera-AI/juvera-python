@@ -55,6 +55,52 @@ def test_non_otlp_envelope_falls_through_unchanged():
     assert events[0]["source"] == "capture"
 
 
+def test_normalizer_accepts_prompt_completion_token_aliases():
+    """Phoenix/OpenInference style prompt_tokens/completion_tokens must be honored."""
+    envelope = {
+        "resourceSpans": [{"scopeSpans": [{"spans": [{
+            "spanId": "phoenix1",
+            "startTimeUnixNano": "0", "endTimeUnixNano": "1000000",
+            "status": {"code": 1},
+            "attributes": [
+                {"key": "juvera.workflow_type", "value": {"stringValue": "ticket_deflection"}},
+                {"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o-mini"}},
+                {"key": "gen_ai.system", "value": {"stringValue": "openai"}},
+                # Phoenix uses prompt_tokens / completion_tokens
+                {"key": "gen_ai.usage.prompt_tokens", "value": {"intValue": "421"}},
+                {"key": "gen_ai.usage.completion_tokens", "value": {"intValue": "187"}},
+            ],
+        }]}]}],
+    }
+    events = list(_normalize_otlp_envelope_to_events(envelope))
+    assert len(events) == 1
+    e = events[0]
+    assert e["input_tokens"] == 421
+    assert e["output_tokens"] == 187
+    # Cost should be non-zero (catalog-derived from the alias-recognized tokens)
+    assert e["agent_cost_usd"] > 0
+    assert 0.00015 < e["agent_cost_usd"] < 0.00020
+
+
+def test_normalizer_accepts_juvera_agent_id_canonical():
+    """Canonical SDK attribute juvera.agent_id (no .id suffix) must be recognized."""
+    envelope = {
+        "resourceSpans": [{"scopeSpans": [{"spans": [{
+            "spanId": "sdk1",
+            "startTimeUnixNano": "0", "endTimeUnixNano": "1000000",
+            "status": {"code": 1},
+            "attributes": [
+                {"key": "juvera.agent_id", "value": {"stringValue": "support_agent"}},
+                {"key": "juvera.workflow_type", "value": {"stringValue": "ticket_deflection"}},
+            ],
+        }]}]}],
+    }
+    events = list(_normalize_otlp_envelope_to_events(envelope))
+    assert len(events) == 1
+    assert events[0]["agent_id"] == "support_agent"
+    assert events[0]["workflow_type"] == "ticket_deflection"
+
+
 def test_otlp_error_status_marks_event_error():
     envelope = {
         "resourceSpans": [{"scopeSpans": [{"spans": [{

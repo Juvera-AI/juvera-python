@@ -48,6 +48,24 @@ def test_listen_local_flag_overrides_env_key(tmp_path):
     assert "LOCAL CAPTURE ONLY" in combined
 
 
+def test_listen_local_with_setup_token_skips_bootstrap(tmp_path):
+    """--local must NOT call bootstrap even when setup token is present."""
+    env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""),
+           "JUVERA_SETUP_TOKEN": "setup_test_token", "JUVERA_SETUP_ID": "setup_test_id",
+           # Point API at an unreachable endpoint — if bootstrap runs, this would fail
+           "JUVERA_API_BASE_URL": "http://127.0.0.1:1",
+           "NO_COLOR": "1"}
+    p = _start(["--port", "0", "--local"], env=env)
+    time.sleep(1.5)
+    p.send_signal(signal.SIGINT)
+    out, err = p.communicate(timeout=10)
+    combined = out + err
+    # Banner should print (relay started, bootstrap skipped)
+    assert "LOCAL CAPTURE ONLY" in combined, f"banner missing. stdout={out!r} stderr={err!r}"
+    # Should NOT have died before printing the banner
+    assert "credentials ignored" in combined or "--local override" in combined
+
+
 def test_listen_with_setup_token_prints_cloud_upload_banner(tmp_path):
     env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""),
            "JUVERA_SETUP_TOKEN": "setup_test_token", "JUVERA_SETUP_ID": "setup_test_id",

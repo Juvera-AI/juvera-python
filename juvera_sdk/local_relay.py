@@ -87,6 +87,16 @@ def _normalize_otlp_envelope_to_events(
     If the envelope has no ``resourceSpans`` key (non-OTLP shape), yields the
     envelope as a single event with ``source`` set to ``"capture"``
     (back-compat: preserves any non-OTLP captures).
+
+    Attribute lookup order is canonical-first so that the juvera-sdk output
+    wins, with fallbacks for alternate emitters:
+
+    - ``juvera.agent_id`` (canonical SDK) → ``juvera.agent.id`` → ``agent_id``
+    - ``juvera.workflow_type`` (canonical SDK) → ``juvera.workflow.type`` → ``workflow_type``
+    - token counts: ``gen_ai.usage.input_tokens`` / ``gen_ai.usage.output_tokens``
+      (OpenTelemetry GenAI semconv) → ``gen_ai.usage.prompt_tokens`` /
+      ``gen_ai.usage.completion_tokens`` (Phoenix / OpenInference aliases) →
+      ``juvera.tokens.input`` / ``juvera.tokens.output``
     """
     from juvera_sdk.costs import compute_token_cost_usd
     from juvera_sdk.roi import estimate_roi, WORKFLOW_BASELINES
@@ -106,13 +116,14 @@ def _normalize_otlp_envelope_to_events(
 
                 # --- field mapping ---
                 agent_id = (
-                    attrs.get("juvera.agent.id")
-                    or attrs.get("agent_id")
+                    attrs.get("juvera.agent_id")       # canonical SDK (juvera-sdk span.py)
+                    or attrs.get("juvera.agent.id")    # dotted-path alternate
+                    or attrs.get("agent_id")            # bare fallback
                 )
                 workflow_type = (
-                    attrs.get("juvera.workflow.type")
-                    or attrs.get("workflow_type")
-                    or attrs.get("juvera.workflow_type")
+                    attrs.get("juvera.workflow_type")  # canonical SDK (juvera-sdk span.py)
+                    or attrs.get("juvera.workflow.type")  # dotted-path alternate
+                    or attrs.get("workflow_type")       # bare fallback
                 )
                 work_item_id = (
                     attrs.get("juvera.work_item_id")
@@ -127,12 +138,14 @@ def _normalize_otlp_envelope_to_events(
                     or attrs.get("juvera.provider")
                 )
                 input_tokens_raw = (
-                    attrs.get("gen_ai.usage.input_tokens")
-                    or attrs.get("juvera.tokens.input")
+                    attrs.get("gen_ai.usage.input_tokens")      # OTel GenAI semconv (canonical)
+                    or attrs.get("gen_ai.usage.prompt_tokens")  # Phoenix / OpenInference alias
+                    or attrs.get("juvera.tokens.input")         # juvera-prefixed fallback
                 )
                 output_tokens_raw = (
-                    attrs.get("gen_ai.usage.output_tokens")
-                    or attrs.get("juvera.tokens.output")
+                    attrs.get("gen_ai.usage.output_tokens")         # OTel GenAI semconv (canonical)
+                    or attrs.get("gen_ai.usage.completion_tokens")  # Phoenix / OpenInference alias
+                    or attrs.get("juvera.tokens.output")            # juvera-prefixed fallback
                 )
                 input_tokens = int(input_tokens_raw) if input_tokens_raw is not None else 0
                 output_tokens = int(output_tokens_raw) if output_tokens_raw is not None else 0
@@ -1076,7 +1089,7 @@ def run_listen(args: argparse.Namespace) -> int:
     server = ThreadingHTTPServer((args.host, args.port), build_handler(config))
     # Retrieve the actual bound port (may differ from args.port when args.port == 0).
     bound_host, bound_port = server.server_address
-    if config.setup_token:
+    if config.setup_token and not config.local:
         try:
             _bootstrap_setup_context(config)
         except Exception as exc:
