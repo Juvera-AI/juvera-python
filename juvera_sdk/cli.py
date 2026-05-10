@@ -22,10 +22,21 @@ def _should_use_color() -> bool:
 
 
 def _should_use_unicode() -> bool:
-    return "UTF-8" in os.environ.get("LANG", "") or sys.stdout.encoding.lower().startswith("utf")
+    import os
+    if "UTF-8" in os.environ.get("LANG", ""):
+        return True
+    encoding = sys.stdout.encoding or ""
+    return encoding.lower().startswith("utf")
 
 
 def run_demo(args) -> int:
+    if args.live:
+        import warnings
+        warnings.warn(
+            "--live is not yet implemented; running simulation. "
+            "Live mode will hit OPENAI_API_KEY/ANTHROPIC_API_KEY-backed model in a future release.",
+            stacklevel=2,
+        )
     from juvera_sdk.demo import generate_synthetic_run, render_roi_card
     from juvera_sdk.local_storage import capture_path_for, write_capture_event
 
