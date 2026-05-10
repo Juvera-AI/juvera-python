@@ -94,7 +94,7 @@ def render_html(events: list[dict[str, Any]], *, window_label: str) -> str:
     """Render events into HTML report using Jinja2 template with autoescape enabled."""
     env = Environment(
         loader=FileSystemLoader(str(_TEMPLATES_DIR)),
-        autoescape=select_autoescape(["html"]),
+        autoescape=select_autoescape(["html", "j2"]),
     )
     template = env.get_template("report.html.j2")
     ctx = build_report_context(events, window_label=window_label)

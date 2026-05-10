@@ -38,3 +38,19 @@ def test_render_html_handles_empty_events():
     html = render_html([], window_label="last 7d")
     assert "0 agent runs captured" in html
     assert "+$0.0000" in html
+
+
+def test_render_html_escapes_user_controlled_fields():
+    """Critical: agent_id and other user-controlled fields must be HTML-escaped."""
+    hostile_event = {
+        "schema_version": "1", "event_id": "e_xss", "captured_at": "2026-05-08T10:00:00Z",
+        "source": "demo", "agent_id": "<script>alert('xss')</script>",
+        "workflow_type": "ticket_deflection", "work_item_id": None,
+        "model": "gpt-4o-mini", "provider": "openai",
+        "input_tokens": 100, "output_tokens": 50, "agent_cost_usd": 0.0001,
+        "duration_ms": 1000, "status": "success", "tool_calls": [], "error": None,
+        "estimated_savings_usd": 21.99,
+    }
+    html = render_html([hostile_event], window_label="last 7d")
+    assert "<script>alert" not in html, "XSS sink — autoescape not working"
+    assert "&lt;script&gt;" in html, "Expected HTML-escaped script tag"
