@@ -6,28 +6,57 @@
 
 Most observability tools tell you *how* your agent ran. Juvera tells you *what it was worth*.
 
+## 60 seconds
+
 ```bash
 pip install juvera-sdk
+juvera demo
+```
+
+You'll see:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Juvera captured 1 agent run                                 │
+│ Workflow:        ticket_deflection                          │
+│ Human baseline:  $22.00 · 15 min                            │
+│ Agent cost:      $0.00                                      │
+│ Estimated value: +$22.00  (100.00% cost reduction)          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+No account. No API key. No data leaves your machine.
+
+> **macOS Homebrew Python users:** `pip install` may hit a PEP 668 "externally-managed-environment" error. Use a venv: `python3 -m venv .venv && source .venv/bin/activate && pip install juvera-sdk && juvera demo`.
+
+## Capture your real agent (2 more minutes)
+
+```bash
+juvera listen
+export OPENAI_BASE_URL=http://127.0.0.1:4318/proxy/openai/v1
+# run your agent normally — captures land in ~/.juvera/captures/
+
+juvera report  # opens an HTML ROI report in your browser
+```
+
+## Use the ROI calculator standalone
+
+```python
+from juvera_sdk import estimate_roi
+roi = estimate_roi("ticket_deflection", agent_cost_usd=0.0002)
+# → {'estimated_savings_usd': 21.9998, ...}
+```
+
+## Configure
+
+```bash
+juvera config get                    # see all settings
+juvera config set telemetry true     # opt in to anonymous usage stats (off by default)
 ```
 
 ---
 
-## Quickstart
-
-### 1. Start proxy-first
-
-```bash
-juvera listen --api-key "$JUVERA_API_KEY" --org-id "$JUVERA_ORG_ID"
-export OPENAI_BASE_URL=http://127.0.0.1:4318/proxy/openai/v1
-export ANTHROPIC_BASE_URL=http://127.0.0.1:4318/proxy/anthropic/v1
-```
-
-Run your app normally, then validate what Juvera saw:
-
-```bash
-juvera validate
-juvera patch
-```
+## Detailed quickstart
 
 ### 2. Upgrade to workflow-first instrumentation
 
