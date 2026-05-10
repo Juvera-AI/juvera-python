@@ -1,2 +1,3 @@
 recursive-include claude-plugin *
 recursive-include juvera_sdk/data *.json
+recursive-include juvera_sdk/templates *.j2
