@@ -7,11 +7,12 @@ import socket
 import threading
 import time
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 from urllib.parse import urlsplit
 
 import httpx
@@ -51,6 +52,141 @@ def _attrs_to_dict(attrs: list[dict[str, Any]] | None) -> dict[str, Any]:
         elif "boolValue" in value:
             result[key] = value["boolValue"]
     return result
+
+
+def _otlp_attrs_to_dict(attrs_list: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Convert OTLP attributes list to a flat {key: native_value} dict."""
+    out: dict[str, Any] = {}
+    for a in attrs_list or []:
+        k = a.get("key")
+        v = a.get("value", {})
+        # OTLP value: {"stringValue": ...} | {"intValue": ...} | {"doubleValue": ...} | {"boolValue": ...}
+        for vk in ("stringValue", "intValue", "doubleValue", "boolValue"):
+            if vk in v:
+                val = v[vk]
+                if vk == "intValue":
+                    val = int(val)
+                elif vk == "doubleValue":
+                    val = float(val)
+                elif vk == "boolValue":
+                    val = bool(val)
+                out[k] = val
+                break
+    return out
+
+
+def _new_span_id() -> str:
+    return uuid.uuid4().hex[:16]
+
+
+def _normalize_otlp_envelope_to_events(
+    envelope: dict[str, Any],
+) -> Generator[dict[str, Any], None, None]:
+    """Yield demo-shaped events (one per span) from an OTLP trace envelope.
+
+    If the envelope has no ``resourceSpans`` key (non-OTLP shape), yields the
+    envelope as a single event with ``source`` set to ``"capture"``
+    (back-compat: preserves any non-OTLP captures).
+    """
+    from juvera_sdk.costs import compute_token_cost_usd
+    from juvera_sdk.roi import estimate_roi, WORKFLOW_BASELINES
+
+    resource_spans = envelope.get("resourceSpans")
+    if not resource_spans:
+        # Non-OTLP fallback: emit as a single raw event.
+        event = dict(envelope)
+        event.setdefault("source", "capture")
+        yield event
+        return
+
+    for resource_span in resource_spans:
+        for scope_span in resource_span.get("scopeSpans") or []:
+            for span in scope_span.get("spans") or []:
+                attrs = _otlp_attrs_to_dict(span.get("attributes"))
+
+                # --- field mapping ---
+                agent_id = (
+                    attrs.get("juvera.agent.id")
+                    or attrs.get("agent_id")
+                )
+                workflow_type = (
+                    attrs.get("juvera.workflow.type")
+                    or attrs.get("workflow_type")
+                    or attrs.get("juvera.workflow_type")
+                )
+                work_item_id = (
+                    attrs.get("juvera.work_item_id")
+                    or attrs.get("work_item_id")
+                )
+                model = (
+                    attrs.get("gen_ai.request.model")
+                    or attrs.get("juvera.model")
+                )
+                provider = (
+                    attrs.get("gen_ai.system")
+                    or attrs.get("juvera.provider")
+                )
+                input_tokens_raw = (
+                    attrs.get("gen_ai.usage.input_tokens")
+                    or attrs.get("juvera.tokens.input")
+                )
+                output_tokens_raw = (
+                    attrs.get("gen_ai.usage.output_tokens")
+                    or attrs.get("juvera.tokens.output")
+                )
+                input_tokens = int(input_tokens_raw) if input_tokens_raw is not None else 0
+                output_tokens = int(output_tokens_raw) if output_tokens_raw is not None else 0
+
+                # Duration: nanoseconds → milliseconds
+                try:
+                    start_ns = int(span.get("startTimeUnixNano") or 0)
+                    end_ns = int(span.get("endTimeUnixNano") or 0)
+                    duration_ms = (end_ns - start_ns) / 1_000_000
+                except (TypeError, ValueError):
+                    duration_ms = 0.0
+
+                # Status: OTLP STATUS_CODE_ERROR = 2
+                status_code = (span.get("status") or {}).get("code", 0)
+                status = "error" if status_code == 2 else "success"
+
+                # Cost
+                agent_cost_usd: float | None = None
+                if model and (input_tokens or output_tokens):
+                    agent_cost_usd = compute_token_cost_usd(
+                        model, input_tokens, output_tokens, provider
+                    )
+
+                # Savings (suppress unknown-workflow warnings)
+                estimated_savings_usd: float | None = None
+                if workflow_type in WORKFLOW_BASELINES:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        roi = estimate_roi(workflow_type, agent_cost_usd or 0.0)
+                    if roi is not None:
+                        estimated_savings_usd = roi.get("estimated_savings_usd")
+
+                event: dict[str, Any] = {
+                    "schema_version": "1",
+                    "event_id": span.get("spanId") or _new_span_id(),
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "source": "capture",
+                    "agent_id": agent_id,
+                    "workflow_type": workflow_type,
+                    "work_item_id": work_item_id,
+                    "model": model,
+                    "provider": provider,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "agent_cost_usd": agent_cost_usd,
+                    "duration_ms": duration_ms,
+                    "status": status,
+                    "tool_calls": [],
+                    "error": None if status == "success" else (
+                        attrs.get("exception.message") or "error"
+                    ),
+                    "estimated_savings_usd": estimated_savings_usd,
+                }
+                yield event
 
 
 def _upsert_attr(attrs: list[dict[str, Any]], key: str, value: Any) -> None:
@@ -703,19 +839,33 @@ def _launch_episode_url_poll(config: RelayConfig) -> None:
 
 
 def _forward_to_ingest(config: RelayConfig, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
     if config.local or (not config.api_key and not config.setup_token):
         return 202, {"accepted": False, "detail": "Relay captured traffic locally, but Juvera has not provisioned a setup token yet. Keep the onboarding tab open, or use JUVERA_API_KEY / JUVERA_SETUP_TOKEN directly."}
-    response = httpx.post(
-        f"{config.ingest_endpoint}{path}",
-        json=payload,
-        headers=_ingest_headers(config),
-        timeout=10.0,
-    )
-    response.raise_for_status()
     try:
-        return response.status_code, response.json()
-    except Exception:
-        return response.status_code, {"accepted": True}
+        response = httpx.post(
+            f"{config.ingest_endpoint}{path}",
+            json=payload,
+            headers=_ingest_headers(config),
+            timeout=10.0,
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # Local persistence already succeeded in _persist_local; treat upload as best-effort.
+            _log.warning(
+                "juvera upload returned %s; capture remains local", e.response.status_code
+            )
+            return 202, {"accepted": True, "detail": f"Captured locally; upload returned {e.response.status_code}"}
+        try:
+            return response.status_code, response.json()
+        except Exception:
+            return response.status_code, {"accepted": True}
+    except httpx.HTTPError as e:
+        # ConnectError, Timeout, etc. — upload is best-effort after local persistence.
+        _log.warning("juvera upload failed (%s); capture remains local", type(e).__name__)
+        return 202, {"accepted": True, "detail": f"Captured locally; upload failed: {type(e).__name__}"}
 
 
 def _proxy_request(handler: BaseHTTPRequestHandler, provider: str, target_base: str, config: RelayConfig) -> None:
@@ -865,15 +1015,18 @@ def build_handler(config: RelayConfig):
 
 
 def _persist_local(span_event: dict, run_id: str) -> None:
-    """Write a span event to local NDJSON storage. Best-effort: never raises."""
+    """Write a span event to local NDJSON storage. Best-effort: never raises.
+
+    Normalizes OTLP envelopes into demo-shaped events (one per span) so that
+    ``juvera report`` can aggregate on top-level fields (agent_id,
+    workflow_type, agent_cost_usd, model, etc.).  Non-OTLP shapes fall through
+    to a single raw-event write for back-compat.
+    """
     try:
         from juvera_sdk.local_storage import capture_path_for, write_capture_event
         path = capture_path_for(source="capture", run_id=run_id)
-        event = dict(span_event)
-        event.setdefault("schema_version", "1")
-        event.setdefault("source", "capture")
-        event.setdefault("captured_at", datetime.now(timezone.utc).isoformat())
-        write_capture_event(path, event)
+        for event in _normalize_otlp_envelope_to_events(span_event):
+            write_capture_event(path, event)
     except OSError:
         pass  # local persistence is best-effort; never crash the relay
 
@@ -881,13 +1034,15 @@ def _persist_local(span_event: dict, run_id: str) -> None:
 def _print_mode_banner(args: argparse.Namespace, host: str, port: int) -> None:
     """Mandatory startup banner showing capture mode + endpoints."""
     import sys as _sys
-    use_cloud = bool(getattr(args, "api_key", None)) and not getattr(args, "local", False)
+    has_creds = bool(getattr(args, "api_key", None) or getattr(args, "setup_token", None))
+    use_cloud = has_creds and not getattr(args, "local", False)
     if use_cloud:
-        mode = "LOCAL + CLOUD UPLOAD  (API key detected)"
-    elif not getattr(args, "api_key", None):
+        creds_label = "API key" if getattr(args, "api_key", None) else "setup token"
+        mode = f"LOCAL + CLOUD UPLOAD  ({creds_label} detected)"
+    elif not has_creds:
         mode = "LOCAL CAPTURE ONLY  (no JUVERA_API_KEY set)"
     else:
-        mode = "LOCAL CAPTURE ONLY  (--local override; key ignored)"
+        mode = "LOCAL CAPTURE ONLY  (--local override; credentials ignored)"
 
     print(f"Juvera Local Relay running on http://{host}:{port}")
     print()
@@ -918,15 +1073,17 @@ def run_listen(args: argparse.Namespace) -> int:
         environment=args.environment,
         local=getattr(args, "local", False),
     )
+    server = ThreadingHTTPServer((args.host, args.port), build_handler(config))
+    # Retrieve the actual bound port (may differ from args.port when args.port == 0).
+    bound_host, bound_port = server.server_address
     if config.setup_token:
         try:
             _bootstrap_setup_context(config)
         except Exception as exc:
+            _print_mode_banner(args, bound_host, bound_port)
             print(f"[juvera] Setup bootstrap failed: {exc}")
+            server.server_close()
             return 1
-    server = ThreadingHTTPServer((args.host, args.port), build_handler(config))
-    # Retrieve the actual bound port (may differ from args.port when args.port == 0).
-    bound_host, bound_port = server.server_address
     _print_mode_banner(args, bound_host, bound_port)
     if config.setup_session_id and not config.state.setup_provisioned:
         print(f"[juvera] Waiting for browser provisioning for setup session: {config.setup_session_id}")

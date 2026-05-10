@@ -46,3 +46,16 @@ def test_listen_local_flag_overrides_env_key(tmp_path):
     out, err = p.communicate(timeout=10)
     combined = out + err
     assert "LOCAL CAPTURE ONLY" in combined
+
+
+def test_listen_with_setup_token_prints_cloud_upload_banner(tmp_path):
+    env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""),
+           "JUVERA_SETUP_TOKEN": "setup_test_token", "JUVERA_SETUP_ID": "setup_test_id",
+           "NO_COLOR": "1"}
+    p = _start(["--port", "0"], env=env)
+    time.sleep(1.0)
+    p.send_signal(signal.SIGINT)
+    out, err = p.communicate(timeout=10)
+    combined = out + err
+    assert "LOCAL + CLOUD UPLOAD" in combined, f"banner missing. stdout={out!r} stderr={err!r}"
+    assert "setup token" in combined
