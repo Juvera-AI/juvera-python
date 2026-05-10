@@ -30,3 +30,22 @@ def test_card_emits_ansi_when_color_on():
     run = generate_synthetic_run(seed=1)
     out = render_roi_card(run, color=True, unicode=True)
     assert "\x1b[" in out
+
+
+def test_card_unicode_off_strips_arrow_and_dot():
+    """When unicode=False, arrow and dot chars are also swapped to ASCII."""
+    run = generate_synthetic_run(seed=1)
+    out = render_roi_card(run, color=False, unicode=False)
+    assert "→" not in out
+    assert "·" not in out
+    assert "->" in out  # ASCII arrow
+    assert "-" in out   # ASCII dot (already in box, but should also be in body)
+
+
+def test_card_uses_stored_savings_even_when_zero():
+    """estimated_savings_usd=0.0 must be respected, not silently re-computed."""
+    run = generate_synthetic_run(seed=1)
+    run["estimated_savings_usd"] = 0.0
+    out = render_roi_card(run, color=False, unicode=True)
+    # Should display +$0.0000 since stored value is 0.0
+    assert "+$0.0000" in out

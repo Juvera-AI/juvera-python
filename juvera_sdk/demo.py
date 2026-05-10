@@ -117,11 +117,14 @@ def render_roi_card(
     (see `cli.py` for `_should_use_color()` / `_should_use_unicode()`).
     """
     box = _box_chars(unicode)
+    arrow = "→" if unicode else "->"
+    dot = "·" if unicode else "-"
     baseline = WORKFLOW_BASELINES.get(run["workflow_type"], {})
     baseline_cost = baseline.get("human_cost_usd", 0.0)
     baseline_time = baseline.get("human_time_minutes", 0)
     agent_cost = run["agent_cost_usd"]
-    savings = run.get("estimated_savings_usd") or (baseline_cost - agent_cost)
+    stored_savings = run.get("estimated_savings_usd")
+    savings = stored_savings if stored_savings is not None else (baseline_cost - agent_cost)
     pct = (savings / baseline_cost * 100) if baseline_cost else 0.0
     time_saved = baseline_time * (savings / baseline_cost) if baseline_cost else 0.0
 
@@ -135,14 +138,14 @@ def render_roi_card(
     lines = [
         f"Simulating 1 {run['workflow_type'].replace('_', ' ')} run...",
         "",
-        f'  → Agent received: "{run.get("_user_message", "")}"',
+        f'  {arrow} Agent received: "{run.get("_user_message", "")}"',
     ]
     for tc in run["tool_calls"]:
-        lines.append(f"  → Tool call: {tc['name']:<24}({tc['duration_ms']}ms)")
-    lines.append(f"  → Agent responded in {run['duration_ms'] / 1000:.1f}s")
+        lines.append(f"  {arrow} Tool call: {tc['name']:<24}({tc['duration_ms']}ms)")
+    lines.append(f"  {arrow} Agent responded in {run['duration_ms'] / 1000:.1f}s")
     lines.append(
-        f"  → Tokens: {run['input_tokens']} in / {run['output_tokens']} out · "
-        f"{run['model']} · ${agent_cost:.4f}"
+        f"  {arrow} Tokens: {run['input_tokens']} in / {run['output_tokens']} out {dot} "
+        f"{run['model']} {dot} ${agent_cost:.4f}"
     )
     lines.append("")
 
@@ -161,7 +164,7 @@ def render_roi_card(
         _row("Juvera captured 1 agent run"),
         _row(),
         _row(f"Workflow:        {run['workflow_type']}"),
-        _row(f"Human baseline:  ${baseline_cost:.2f} · {baseline_time} min"),
+        _row(f"Human baseline:  ${baseline_cost:.2f} {dot} {baseline_time} min"),
         _row(f"Agent cost:      ${agent_cost:.4f}"),
         _row(f"Estimated value: {saved_label}"),
         _row(f"Time saved:      {time_saved:.1f} min"),
@@ -171,6 +174,6 @@ def render_roi_card(
         border_bot,
         "",
         "  Full HTML report:       juvera report",
-        "  Instrument your code:   pip install juvera-sdk  →  README.md",
+        f"  Instrument your code:   pip install juvera-sdk  {arrow}  README.md",
     ]
     return "\n".join(lines)
