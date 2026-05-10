@@ -527,6 +527,7 @@ class RelayConfig:
         setup_token: str | None = None,
         setup_id: str | None = None,
         environment: str = "local",
+        local: bool = False,
     ):
         self.host = host
         self.port = port
@@ -537,6 +538,7 @@ class RelayConfig:
         self.setup_token = setup_token
         self.setup_id = setup_id
         self.environment = environment
+        self.local = local
         self.setup_agent_id: str | None = None
         self.setup_session_id: str | None = setup_id
         self.app_base_url: str | None = None
@@ -677,7 +679,7 @@ def _launch_episode_url_poll(config: RelayConfig) -> None:
 
 
 def _forward_to_ingest(config: RelayConfig, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    if not config.api_key and not config.setup_token:
+    if config.local or (not config.api_key and not config.setup_token):
         return 202, {"accepted": False, "detail": "Relay captured traffic locally, but Juvera has not provisioned a setup token yet. Keep the onboarding tab open, or use JUVERA_API_KEY / JUVERA_SETUP_TOKEN directly."}
     response = httpx.post(
         f"{config.ingest_endpoint}{path}",
@@ -734,6 +736,7 @@ def _proxy_request(handler: BaseHTTPRequestHandler, provider: str, target_base: 
             duration_ms=duration_ms,
             session_id=config.state.session_id,
         )
+        _persist_local(envelope, config.state.session_id)
         _forward_to_ingest(config, "/v1/traces", envelope)
         config.state.record_provider(provider, metadata)
         _launch_episode_url_poll(config)
@@ -800,6 +803,7 @@ def build_handler(config: RelayConfig):
                     return
                 try:
                     enriched, metadata = enrich_trace_envelope(payload, config.state.session_id)
+                    _persist_local(enriched, config.state.session_id)
                     status, response_body = _forward_to_ingest(config, "/v1/traces", enriched)
                     config.state.record_trace(metadata)
                     _launch_episode_url_poll(config)
@@ -836,6 +840,47 @@ def build_handler(config: RelayConfig):
     return RelayHandler
 
 
+def _persist_local(span_event: dict, run_id: str) -> None:
+    """Write a span event to local NDJSON storage. Best-effort: never raises."""
+    try:
+        from juvera_sdk.local_storage import capture_path_for, write_capture_event
+        path = capture_path_for(source="capture", run_id=run_id)
+        event = dict(span_event)
+        event.setdefault("schema_version", "1")
+        event.setdefault("source", "capture")
+        event.setdefault("captured_at", datetime.now(timezone.utc).isoformat())
+        write_capture_event(path, event)
+    except OSError:
+        pass  # local persistence is best-effort; never crash the relay
+
+
+def _print_mode_banner(args: argparse.Namespace, host: str, port: int) -> None:
+    """Mandatory startup banner showing capture mode + endpoints."""
+    import sys as _sys
+    use_cloud = bool(getattr(args, "api_key", None)) and not getattr(args, "local", False)
+    if use_cloud:
+        mode = "LOCAL + CLOUD UPLOAD  (API key detected)"
+    elif not getattr(args, "api_key", None):
+        mode = "LOCAL CAPTURE ONLY  (no JUVERA_API_KEY set)"
+    else:
+        mode = "LOCAL CAPTURE ONLY  (--local override; key ignored)"
+
+    print(f"Juvera Local Relay running on http://{host}:{port}")
+    print()
+    print(f"  Mode: {mode}")
+    print(f"  Captures → ~/.juvera/captures/<date>/")
+    if use_cloud:
+        endpoint = getattr(args, "ingest_endpoint", "https://ingest.juvera.ai")
+        print(f"  Uploading to {endpoint}")
+    else:
+        print(f"  Run 'juvera report' to see ROI summary")
+        print(f"  Set JUVERA_API_KEY to also upload to cloud")
+    print()
+    print(f"  OPENAI_BASE_URL=http://{host}:{port}/proxy/openai/v1")
+    print(f"  ANTHROPIC_BASE_URL=http://{host}:{port}/proxy/anthropic/v1")
+    _sys.stdout.flush()
+
+
 def run_listen(args: argparse.Namespace) -> int:
     config = RelayConfig(
         host=args.host,
@@ -847,6 +892,7 @@ def run_listen(args: argparse.Namespace) -> int:
         setup_token=args.setup_token,
         setup_id=args.setup_id,
         environment=args.environment,
+        local=getattr(args, "local", False),
     )
     if config.setup_token:
         try:
@@ -855,10 +901,9 @@ def run_listen(args: argparse.Namespace) -> int:
             print(f"[juvera] Setup bootstrap failed: {exc}")
             return 1
     server = ThreadingHTTPServer((args.host, args.port), build_handler(config))
-    print(f"[juvera] Local Relay listening on http://{args.host}:{args.port}")
-    print(f"[juvera] Status endpoint: http://{args.host}:{args.port}/status")
-    print(f"[juvera] Proxy OpenAI via http://{args.host}:{args.port}/proxy/openai/v1")
-    print(f"[juvera] Proxy Anthropic via http://{args.host}:{args.port}/proxy/anthropic/v1")
+    # Retrieve the actual bound port (may differ from args.port when args.port == 0).
+    bound_host, bound_port = server.server_address
+    _print_mode_banner(args, bound_host, bound_port)
     if config.setup_session_id and not config.state.setup_provisioned:
         print(f"[juvera] Waiting for browser provisioning for setup session: {config.setup_session_id}")
     if config.app_base_url:

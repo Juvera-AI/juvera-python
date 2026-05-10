@@ -238,6 +238,8 @@ def main() -> int:
     listen.add_argument("--setup-token", default=os.getenv("JUVERA_SETUP_TOKEN"))
     listen.add_argument("--setup-id", default=os.getenv("JUVERA_SETUP_ID"))
     listen.add_argument("--environment", default=os.getenv("JUVERA_ENVIRONMENT", "local"))
+    listen.add_argument("--local", action="store_true",
+                        help="Force local-only mode (don't upload even if env key set).")
     listen.set_defaults(func=run_listen)
 
     doctor = subparsers.add_parser("doctor", help="Check relay health and optionally probe common local dev ports.")
