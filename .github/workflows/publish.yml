@@ -1,0 +1,39 @@
+# NOTE: This file lives inside the SDK subtree (open-source/sdk-python/.github/)
+# in the monorepo. After `git subtree split --prefix open-source/sdk-python`
+# (run by .github/workflows/sync-sdk.yml in the monorepo), this file lands at
+# the ROOT of the Juvera-AI/juvera-python public repo at .github/workflows/publish.yml.
+# That's where GitHub Actions in the public repo executes it.
+#
+# Do NOT add this file directly to Juvera-AI/juvera-python — every subsequent
+# subtree --force push from the monorepo would wipe it.
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for PyPI trusted publishers (OIDC).
+      id-token: write
+      # Required for actions/checkout — job-level perms default to none for
+      # everything not listed, so without this checkout fails.
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
