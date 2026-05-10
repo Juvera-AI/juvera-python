@@ -95,6 +95,7 @@ def generate_synthetic_run(
 
 
 _GREEN = "\x1b[32m"
+_RED = "\x1b[31m"
 _DIM = "\x1b[2m"
 _RESET = "\x1b[0m"
 
@@ -131,7 +132,10 @@ def render_roi_card(
 
     saved_label = f"{fmt_savings(savings)}  ({fmt_pct(pct)} cost reduction)"
     if color:
-        saved_label = f"{_GREEN}{saved_label}{_RESET}"
+        if savings >= 0:
+            saved_label = f"{_GREEN}{saved_label}{_RESET}"
+        else:
+            saved_label = f"{_RED}{saved_label}{_RESET}"
     next_line = "Next: add work_item_id to verify against real outcomes."
     if color:
         next_line = f"{_DIM}{next_line}{_RESET}"
@@ -165,7 +169,7 @@ def render_roi_card(
         _row("Juvera captured 1 agent run"),
         _row(),
         _row(f"Workflow:        {run['workflow_type']}"),
-        _row(f"Human baseline:  ${baseline_cost:.2f} {dot} {baseline_time} min"),
+        _row(f"Human baseline:  {fmt_cost(baseline_cost)} {dot} {baseline_time} min"),
         _row(f"Agent cost:      {fmt_cost(agent_cost)}"),
         _row(f"Estimated value: {saved_label}"),
         _row(f"Time saved:      {time_saved:.1f} min"),

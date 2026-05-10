@@ -152,15 +152,17 @@ class JuveraSpanProcessor(SpanProcessor):
             lines.append(f"  Model: {s['model']}  |  Tokens: {token_str}")
 
         if cost > 0:
-            lines.append(f"  Estimated cost: ${cost:.4f}")
+            from juvera_sdk._fmt import fmt_cost, fmt_savings
+            lines.append(f"  Estimated cost: {fmt_cost(cost)}")
 
         if s["workflow_type"]:
             from juvera_sdk.roi import WORKFLOW_BASELINES
             baseline = WORKFLOW_BASELINES.get(s["workflow_type"])
             if baseline:
+                from juvera_sdk._fmt import fmt_cost, fmt_savings
                 baseline_cost = baseline["human_cost_usd"]
                 savings = baseline_cost - cost
-                lines.append(f"  ROI estimate: ${savings:.2f} savings  |  ${baseline_cost:.2f} baseline  |  {s['workflow_type']}")
+                lines.append(f"  ROI estimate: {fmt_savings(savings)} savings  |  {fmt_cost(baseline_cost)} baseline  |  {s['workflow_type']}")
 
         lines.append("=" * 50)
         lines.append("")

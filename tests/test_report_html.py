@@ -41,6 +41,21 @@ def test_render_html_handles_empty_events():
     assert "+$0.00" in html
 
 
+def test_total_savings_sums_raw_then_formats():
+    """Total must sum raw values, then format. Don't sum formatted strings."""
+    from juvera_sdk.report import build_report_context
+    events = [
+        {"estimated_savings_usd": 21.999, "workflow_type": "x", "agent_cost_usd": 0.001},
+        {"estimated_savings_usd": 21.999, "workflow_type": "x", "agent_cost_usd": 0.001},
+        {"estimated_savings_usd": 21.999, "workflow_type": "x", "agent_cost_usd": 0.001},
+    ]
+    ctx = build_report_context(events, window_label="x")
+    # Raw sum: 65.997. If we floored each first and summed: 21.99 * 3 = 65.97 (wrong).
+    assert abs(ctx["total_savings"] - 65.997) < 0.001
+    # Formatted total uses floor on the raw sum, not on per-event floors.
+    assert ctx["total_savings_fmt"] == "+$65.99"
+
+
 def test_render_html_escapes_user_controlled_fields():
     """Critical: agent_id and other user-controlled fields must be HTML-escaped."""
     hostile_event = {
