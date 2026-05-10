@@ -37,3 +37,11 @@ def test_report_after_demo_renders_html(tmp_path):
     html = out_path.read_text()
     assert "Juvera ROI Report" in html
     assert "ticket_deflection" in html
+
+
+def test_report_source_capture_warns_when_empty(tmp_path):
+    env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "NO_COLOR": "1"}
+    _run(["demo", "--seed", "1"], env=env)  # populates a demo, NOT a capture
+    r = _run(["report", "--no-open", "--source", "capture"], env=env)
+    assert r.returncode == 0
+    assert "matches no events yet" in r.stderr or "Task 6.1" in r.stderr

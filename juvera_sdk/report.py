@@ -20,7 +20,7 @@ def filter_events(
 ) -> Iterable[dict[str, Any]]:
     """Filter events by date and/or source. Yields matching events."""
     for e in events:
-        if since_date and e.get("captured_at", "")[:10] < since_date:
+        if since_date and e.get("captured_at", "") < since_date:
             continue
         if source and e.get("source") != source:
             continue

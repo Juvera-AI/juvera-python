@@ -42,14 +42,24 @@ def run_demo(args) -> int:
 
     run = generate_synthetic_run(workflow_type=args.workflow, seed=args.seed)
     if not args.no_save:
-        path = capture_path_for(source="demo", run_id=run["event_id"])
-        event = {**run}
-        event["captured_at"] = datetime.now(timezone.utc).isoformat()
-        event.pop("_user_message", None)
-        write_capture_event(path, event)
+        try:
+            path = capture_path_for(source="demo", run_id=run["event_id"])
+            event = {**run}
+            event["captured_at"] = datetime.now(timezone.utc).isoformat()
+            event.pop("_user_message", None)
+            write_capture_event(path, event)
+        except OSError as e:
+            print(f"  (warning: could not save capture: {e})", file=sys.stderr)
 
     print(render_roi_card(run, color=_should_use_color(), unicode=_should_use_unicode()))
     sys.stdout.flush()
+
+    if not args.no_save:
+        from juvera_sdk.local_storage import read_captures
+        n = sum(1 for _ in read_captures(source="demo"))
+        if n > 1:
+            print(f"\n  ({n} demo captures stored — 'juvera report' will aggregate all of them)")
+
     return 0
 
 
@@ -65,16 +75,21 @@ def _add_demo_subparser(subparsers) -> None:
     demo.set_defaults(func=run_demo)
 
 
-def _since_to_date(since: str) -> str | None:
-    """Convert '24h'|'7d'|'30d'|'all' to a YYYY-MM-DD cutoff (inclusive)."""
+def _since_to_cutoffs(since: str) -> tuple[str | None, str | None]:
+    """Return (date_cutoff_for_dirs, iso_cutoff_for_events).
+
+    date cutoff is YYYY-MM-DD for skipping older date directories cheaply.
+    iso cutoff is full ISO 8601 for per-event timestamp filtering — preserves
+    hour-level precision that 'YYYY-MM-DD' alone would lose for --since 24h.
+    """
     from datetime import timedelta
     if since == "all":
-        return None
+        return None, None
     n_str, unit = since[:-1], since[-1]
     n = int(n_str)
     delta = {"h": timedelta(hours=n), "d": timedelta(days=n)}[unit]
     cutoff = datetime.now(timezone.utc) - delta
-    return cutoff.strftime("%Y-%m-%d")
+    return cutoff.strftime("%Y-%m-%d"), cutoff.isoformat()
 
 
 def run_report(args) -> int:
@@ -83,13 +98,21 @@ def run_report(args) -> int:
     from juvera_sdk.local_storage import read_captures, reports_root
     from juvera_sdk.report import filter_events, render_html, build_report_context
 
-    since_date = _since_to_date(args.since)
+    date_cutoff, iso_cutoff = _since_to_cutoffs(args.since)
     source = None if args.source == "all" else args.source
     events = list(filter_events(
-        read_captures(since_date=since_date, source=source),
-        since_date=since_date,
+        read_captures(since_date=date_cutoff, source=source),
+        since_date=iso_cutoff,   # finer per-event filter (hour precision)
         source=source,
     ))
+
+    if args.source == "capture" and not events:
+        print(
+            "  (note: --source capture matches no events yet. 'juvera listen' will start "
+            "writing local captures in v0.2.0 (Task 6.1). Use --source demo or --source all "
+            "to see existing data.)",
+            file=sys.stderr,
+        )
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -123,7 +146,9 @@ def run_report(args) -> int:
 def _add_report_subparser(subparsers) -> None:
     rep = subparsers.add_parser("report", help="Render an HTML ROI report from local captures.")
     rep.add_argument("--since", default="30d", help="Time window: '24h', '7d', '30d', 'all'.")
-    rep.add_argument("--source", choices=["demo", "capture", "all"], default="all")
+    rep.add_argument("--source", choices=["demo", "capture", "all"], default="all",
+                     help="Filter capture source. 'capture' is populated once 'juvera listen' "
+                          "writes to local storage (Task 6.1 — landing soon).")
     rep.add_argument("--format", choices=["html", "md"], default="html")
     rep.add_argument("--output", default=None, help="Override output file path.")
     rep.add_argument("--no-open", action="store_true", help="Skip auto-open in browser.")

@@ -55,3 +55,16 @@ def test_demo_live_flag_warns_not_implemented(tmp_path):
     assert r.returncode == 0
     # Warning goes to stderr (Python default for warnings.warn)
     assert "not yet implemented" in r.stderr or "not yet implemented" in r.stdout
+
+
+def test_demo_renders_card_when_save_fails(tmp_path):
+    """If local write fails, demo still prints the card (warning to stderr)."""
+    # Make HOME a path that exists as a FILE, not a dir — write attempts will fail.
+    bad_home = tmp_path / "not_a_dir"
+    bad_home.write_text("blocking file")
+    env = {"HOME": str(bad_home), "PATH": __import__("os").environ.get("PATH", ""),
+           "NO_COLOR": "1"}
+    r = _run(["demo", "--seed", "1"], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "Juvera captured 1 agent run" in r.stdout
+    assert "could not save capture" in r.stderr

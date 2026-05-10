@@ -27,7 +27,7 @@
   <p class="subtitle">Generated {{ generated_at }} · Window: {{ window_label }}</p>
 
   <div class="hero">
-    <div>{{ total_runs }} agent run{{ "s" if total_runs != 1 else "" }} captured</div>
+    <div>{{ total_runs }} agent run{{ "s" if total_runs != 1 else "" }} captured · {{ window_label }}</div>
     <div class="hero-savings">+${{ "%.4f"|format(total_savings) }} estimated savings</div>
     <div>Top workflow: <strong>{{ top_workflow }}</strong></div>
   </div>

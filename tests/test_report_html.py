@@ -37,6 +37,7 @@ def test_render_html_contains_hero_and_sections():
 def test_render_html_handles_empty_events():
     html = render_html([], window_label="last 7d")
     assert "0 agent runs captured" in html
+    assert "last 7d" in html  # window_label rendered
     assert "+$0.0000" in html
 
 
