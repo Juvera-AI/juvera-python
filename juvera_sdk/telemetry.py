@@ -158,3 +158,71 @@ def maybe_prompt_consent() -> None:
     enabled = answer in ("y", "yes")
     set_value("telemetry", enabled)
     set_value("prompted", True)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Telemetry sender (Task 7.4) — fire-and-forget; no-op without endpoint
+# ──────────────────────────────────────────────────────────────────────────────
+
+import httpx
+import platform
+import secrets
+
+
+def _new_event_id() -> str:
+    """Generate a 26-char random ID (ULID-shaped)."""
+    alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+    return "".join(secrets.choice(alphabet) for _ in range(26))
+
+
+def send_event(
+    *, command: str, outcome: str, duration_ms: int, flags_used: list[str],
+    timeout: float = 2.0,
+) -> bool:
+    """Fire-and-forget anonymous telemetry. No-op if not opted in or no endpoint.
+
+    Args:
+        command: command name (e.g. 'demo', 'listen', 'report')
+        outcome: 'success' or 'error'
+        duration_ms: command execution time in milliseconds
+        flags_used: allowlisted flag presence names (never values)
+        timeout: HTTP request timeout in seconds
+
+    Returns:
+        True if the telemetry was sent successfully, False otherwise.
+        Network errors are swallowed silently; the caller should not retry.
+    """
+    from juvera_sdk.user_config import load_config
+
+    cfg = load_config()
+    if not cfg.get("telemetry"):
+        return False
+    endpoint = cfg.get("telemetry_endpoint")
+    if not endpoint:
+        return False
+
+    try:
+        from juvera_sdk import __version__ as _ver
+    except (ImportError, AttributeError):
+        _ver = "unknown"
+
+    payload = {
+        "schema_version": "1",
+        "install_id": cfg["install_id"],
+        "event_id": _new_event_id(),
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "command": command,
+        "outcome": outcome,
+        "duration_ms": duration_ms,
+        "os": platform.system().lower(),
+        "arch": platform.machine().lower(),
+        "python_version": platform.python_version(),
+        "juvera_sdk_version": _ver,
+        "flags_used": flags_used,
+    }
+    try:
+        with httpx.Client(timeout=timeout) as c:
+            r = c.post(endpoint, json=payload)
+            return r.status_code < 400
+    except httpx.HTTPError:
+        return False

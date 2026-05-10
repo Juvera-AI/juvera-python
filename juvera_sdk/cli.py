@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 from juvera_sdk.local_relay import (
@@ -261,14 +262,23 @@ def main() -> int:
     _add_config_subparser(subparsers)
 
     args = parser.parse_args()
+    t0 = time.monotonic()
     rc = args.func(args)
 
-    # After primary command output: bump local counter and (only on first run) prompt for consent.
-    # Both wrapped in try/except so telemetry never breaks the user's command.
+    # After primary command output: bump local counter, prompt for consent, and send telemetry.
+    # All wrapped in try/except so telemetry never breaks the user's command.
     try:
-        from juvera_sdk.telemetry import increment_counter, maybe_prompt_consent
+        from juvera_sdk.telemetry import (
+            increment_counter, maybe_prompt_consent, send_event, build_flags_used,
+        )
         increment_counter(args.command)
         maybe_prompt_consent()
+        send_event(
+            command=args.command,
+            outcome="success" if rc == 0 else "error",
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            flags_used=build_flags_used(args.command, args),
+        )
     except Exception:
         pass
 
