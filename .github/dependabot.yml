@@ -1,0 +1,36 @@
+# Dependabot v2 — runs in Juvera-AI/juvera-python after sync from monorepo.
+#
+# Lives in the SDK subtree (open-source/sdk-python/.github/dependabot.yml) so
+# it survives every sync.
+
+version: 2
+updates:
+  # Python runtime + dev dependencies declared in pyproject.toml
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      python-runtime:
+        patterns:
+          - "opentelemetry-*"
+          - "httpx"
+          - "pydantic"
+          - "jinja2"
+          - "jsonschema"
+      python-dev:
+        patterns:
+          - "pytest*"
+          - "respx"
+          - "build"
+
+  # GitHub Actions versions in .github/workflows/
+  # Dependabot rewrites both the SHA and the trailing version comment.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
