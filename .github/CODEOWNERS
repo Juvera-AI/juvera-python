@@ -1,14 +1,18 @@
-# CODEOWNERS — required reviewers for security-sensitive paths in juvera-sdk.
+# CODEOWNERS — mirror-side defense in depth.
 #
-# After this file is synced to Juvera-AI/juvera-python via `git subtree split`,
-# GitHub uses it to require approval from listed owners before PRs touching
-# these paths can be merged.
+# The PRIMARY CODEOWNERS enforcement for SDK paths lives in the monorepo
+# root (Juvera-AI/juvera_ai/.github/CODEOWNERS). That's the file that
+# actually gates PRs to the source-of-truth paths whose changes will sync
+# downstream into this mirror.
 #
-# Lives in the SDK subtree (open-source/sdk-python/.github/CODEOWNERS) so it
-# survives every sync.
+# This file is mostly documentation: it surfaces the intended owners of
+# SDK paths if someone opens a PR against this mirror directly. Such PRs
+# would be wiped by the next sync from the monorepo anyway, so the
+# enforcement value here is marginal — but having the file documents
+# intent for any human looking at the mirror's source.
 #
-# IMPORTANT: The @handles below match the GitHub usernames of admins on the
-# Juvera-AI/juvera_ai monorepo (verified via gh api repos/Juvera-AI/juvera_ai/collaborators).
+# Edit @handles in BOTH this file and the monorepo root CODEOWNERS
+# whenever maintainership changes.
 
 # Workflows + packaging — anything that affects how the package is built
 # or published. PRs to these paths must be approved by a maintainer.
