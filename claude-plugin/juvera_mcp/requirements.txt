@@ -1,2 +1,2 @@
-mcp[cli]>=1.27.0
+mcp[cli]>=1.27.1
 juvera-sdk>=0.1.6
