@@ -16,10 +16,10 @@
 
 # Workflows + packaging — anything that affects how the package is built
 # or published. PRs to these paths must be approved by a maintainer.
-.github/                    @RocketRaccoon @vinayakraja
-pyproject.toml              @RocketRaccoon @vinayakraja
-MANIFEST.in                 @RocketRaccoon @vinayakraja
+.github/                    @andrey-juvera
+pyproject.toml              @andrey-juvera
+MANIFEST.in                 @andrey-juvera
 
 # Vendored data (pricing catalog) — silent changes to numbers here would
 # mis-report ROI for every user.
-juvera_sdk/data/            @RocketRaccoon @vinayakraja
+juvera_sdk/data/            @andrey-juvera
