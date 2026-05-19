@@ -1,0 +1,25 @@
+# CODEOWNERS — mirror-side defense in depth.
+#
+# The PRIMARY CODEOWNERS enforcement for SDK paths lives in the monorepo
+# root (Juvera-AI/juvera_ai/.github/CODEOWNERS). That's the file that
+# actually gates PRs to the source-of-truth paths whose changes will sync
+# downstream into this mirror.
+#
+# This file is mostly documentation: it surfaces the intended owners of
+# SDK paths if someone opens a PR against this mirror directly. Such PRs
+# would be wiped by the next sync from the monorepo anyway, so the
+# enforcement value here is marginal — but having the file documents
+# intent for any human looking at the mirror's source.
+#
+# Edit @handles in BOTH this file and the monorepo root CODEOWNERS
+# whenever maintainership changes.
+
+# Workflows + packaging — anything that affects how the package is built
+# or published. PRs to these paths must be approved by a maintainer.
+.github/                    @andrey-juvera
+pyproject.toml              @andrey-juvera
+MANIFEST.in                 @andrey-juvera
+
+# Vendored data (pricing catalog) — silent changes to numbers here would
+# mis-report ROI for every user.
+juvera_sdk/data/            @andrey-juvera
