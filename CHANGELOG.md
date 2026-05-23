@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ---
 
+## [0.2.1] — 2026-05-23
+
+### Packaging
+- Add PyPI trove classifiers (Python 3.9–3.13, Development Status, License, Topic). Fixes the missing "Python" badge on the PyPI project page — `shields.io/pypi/pyversions` reads trove classifiers, not `requires-python`. Also makes the package discoverable via PyPI's classifier-based search.
+- Add `keywords` for PyPI search: `ai-agents`, `agent-roi`, `observability`, `telemetry`, `opentelemetry`, `llm`.
+
+No runtime changes; this is a pure metadata release.
+
 ## [0.2.0] — 2026-05-10
 
 ### Added

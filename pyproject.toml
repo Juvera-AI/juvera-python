@@ -4,11 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "juvera-sdk"
-version = "0.2.0"
+version = "0.2.1"
 description = "Open instrumentation SDK for Juvera — emit agent telemetry and business-impact signals"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Monitoring",
+]
+keywords = ["ai-agents", "agent-roi", "observability", "telemetry", "opentelemetry", "llm"]
 dependencies = [
   "opentelemetry-sdk>=1.20,<2.0",
   "pydantic>=2.0,<3.0",
