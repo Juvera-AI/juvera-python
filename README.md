@@ -68,7 +68,7 @@ juvera config set telemetry true     # opt in to anonymous usage stats (off by d
 
 ## Detailed quickstart
 
-### 2. Upgrade to workflow-first instrumentation
+### Upgrade to workflow-first instrumentation
 
 ```python
 import juvera_sdk as j
