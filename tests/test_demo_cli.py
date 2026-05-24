@@ -48,15 +48,6 @@ def test_demo_workflow_flag(tmp_path):
     assert "lead_qualification" in r.stdout
 
 
-def test_demo_live_flag_warns_not_implemented(tmp_path):
-    env = {"HOME": str(tmp_path), "PATH": __import__("os").environ.get("PATH", ""),
-           "NO_COLOR": "1"}
-    r = _run(["demo", "--live", "--seed", "1"], env=env)
-    assert r.returncode == 0
-    # Warning goes to stderr (Python default for warnings.warn)
-    assert "not yet implemented" in r.stderr or "not yet implemented" in r.stdout
-
-
 def test_demo_renders_card_when_save_fails(tmp_path):
     """If local write fails, demo still prints the card (warning to stderr)."""
     # Make HOME a path that exists as a FILE, not a dir — write attempts will fail.

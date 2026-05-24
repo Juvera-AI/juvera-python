@@ -31,13 +31,6 @@ def _should_use_unicode() -> bool:
 
 
 def run_demo(args) -> int:
-    if args.live:
-        import warnings
-        warnings.warn(
-            "--live is not yet implemented; running simulation. "
-            "Live mode will hit OPENAI_API_KEY/ANTHROPIC_API_KEY-backed model in a future release.",
-            stacklevel=2,
-        )
     from juvera_sdk.demo import generate_synthetic_run, render_roi_card
     from juvera_sdk.local_storage import capture_path_for, write_capture_event
 
@@ -71,8 +64,6 @@ def _add_demo_subparser(subparsers) -> None:
                       help="Workflow baseline to simulate.")
     demo.add_argument("--seed", type=int, default=None,
                       help="Seed RNG for deterministic output.")
-    demo.add_argument("--live", action="store_true",
-                      help="If OPENAI/ANTHROPIC API key is set, hit the real model.")
     demo.set_defaults(func=run_demo)
 
 
