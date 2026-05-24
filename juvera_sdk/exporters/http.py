@@ -1,9 +1,12 @@
 """HTTP exporter for Juvera SDK."""
 from __future__ import annotations
+import logging
 import httpx
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from juvera_sdk.config import JuveraConfig
+
+_logger = logging.getLogger("juvera_sdk")
 
 
 def _otel_value(v) -> dict:
@@ -76,7 +79,7 @@ class JuveraSpanExporter(SpanExporter):
             resp.raise_for_status()
             return SpanExportResult.SUCCESS
         except Exception as exc:
-            print(f"[juvera-sdk] export failed: {exc}")
+            _logger.warning("export failed: %s", exc)
             return SpanExportResult.FAILURE
 
     def shutdown(self) -> None:
