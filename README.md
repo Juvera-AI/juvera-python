@@ -62,7 +62,6 @@ juvera config set telemetry true     # opt in to anonymous usage stats (off by d
 - Telemetry NEVER sends: prompts, completions, file paths, API keys, flag values, costs, workflow types, or any data from `~/.juvera/captures/`.
 - Local metrics counters at `~/.juvera/metrics.json` are always-on but never leave your machine unless you opt in.
 - Change your mind anytime: `juvera config set telemetry false` (or `true`).
-- Schema: https://juvera.ai/telemetry-schema *(published when AWS infra lands; see issue #98)*.
 
 ---
 

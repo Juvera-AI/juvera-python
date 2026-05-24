@@ -127,7 +127,6 @@ _PROMPT_TEXT = """
 Help improve Juvera? Share anonymous usage stats:
   juvera version, OS/arch, command name, outcome/duration, allowlisted flag names only.
 Never sent: prompts, completions, file paths, API keys, flag values, costs, workflow types.
-Schema: https://juvera.ai/telemetry-schema
 
 Enable? [y/N] (change anytime: juvera config set telemetry false)
 """
