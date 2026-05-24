@@ -20,7 +20,7 @@ from juvera_sdk.costs import estimate_token_cost_usd, resolve_model_pricing
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4318
-DEFAULT_INGEST_ENDPOINT = "http://localhost:8001"
+DEFAULT_INGEST_ENDPOINT = "https://ingest.juvera.ai"
 DEFAULT_API_BASE_URL = "http://localhost:8000"
 
 
