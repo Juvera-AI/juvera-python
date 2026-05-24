@@ -20,8 +20,8 @@ You'll see:
 │ Juvera captured 1 agent run                                 │
 │ Workflow:        ticket_deflection                          │
 │ Human baseline:  $22.00 · 15 min                            │
-│ Agent cost:      $0.00                                      │
-│ Estimated value: +$22.00  (100.00% cost reduction)          │
+│ Agent cost:      $0.00018                                   │
+│ Estimated value: +$21.99  (99.99% cost reduction)           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
