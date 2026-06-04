@@ -124,6 +124,8 @@ def render_roi_card(
     baseline = WORKFLOW_BASELINES.get(run["workflow_type"], {})
     baseline_cost = baseline.get("human_cost_usd", 0.0)
     baseline_time = baseline.get("human_time_minutes", 0)
+    confidence_label = baseline.get("confidence")
+    source_url = baseline.get("source_url")
     agent_cost = run["agent_cost_usd"]
     stored_savings = run.get("estimated_savings_usd")
     savings = stored_savings if stored_savings is not None else (baseline_cost - agent_cost)
@@ -164,6 +166,17 @@ def render_roi_card(
 
     border_top = box["tl"] + box["h"] * inner + box["tr"]
     border_bot = box["bl"] + box["h"] * inner + box["br"]
+    methodology_line = (
+        f"  Methodology:            {confidence_label} {dot} {source_url}"
+        if confidence_label and source_url
+        else None
+    )
+    post_box_lines = [
+        "",
+        methodology_line,
+        "  Full HTML report:       juvera report",
+        f"  Instrument your code:   pip install juvera-sdk  {arrow}  README.md",
+    ]
     lines += [
         border_top,
         _row("Juvera captured 1 agent run"),
@@ -177,8 +190,6 @@ def render_roi_card(
         _row(),
         _row(next_line),
         border_bot,
-        "",
-        "  Full HTML report:       juvera report",
-        f"  Instrument your code:   pip install juvera-sdk  {arrow}  README.md",
+        *[l for l in post_box_lines if l is not None],
     ]
     return "\n".join(lines)

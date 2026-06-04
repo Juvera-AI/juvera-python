@@ -9,6 +9,7 @@ from typing import Any, Iterable
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from juvera_sdk._fmt import fmt_cost, fmt_savings, fmt_pct
+from juvera_sdk.roi import WORKFLOW_BASELINES
 
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -55,6 +56,7 @@ def build_report_context(
     by_workflow = []
     for wf, row in sorted(by_wf.items(), key=lambda kv: -kv[1]["savings"]):
         attribution_pct = (100.0 * row["attributed"] / row["runs"]) if row["runs"] else 0
+        baseline = WORKFLOW_BASELINES.get(wf, {})
         by_workflow.append({
             "workflow_type": wf,
             "runs": row["runs"],
@@ -64,6 +66,8 @@ def build_report_context(
             "agent_cost_fmt": fmt_cost(row["agent_cost"]),
             "savings_fmt": fmt_savings(row["savings"]),
             "attribution_pct_fmt": fmt_pct(attribution_pct, max_pct=100.0),
+            "confidence": baseline.get("confidence"),
+            "source_url": baseline.get("source_url"),
         })
 
     top_workflow = by_workflow[0]["workflow_type"] if by_workflow else "—"

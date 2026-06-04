@@ -62,6 +62,7 @@ dev = [
   "respx>=0.21",
   "pytest-asyncio>=0.23",
   "build>=1.0",
+  "pyyaml>=6.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -69,7 +70,7 @@ include = ["juvera_sdk*"]
 
 [tool.setuptools.package-data]
 "*" = ["claude-plugin/**/*"]
-"juvera_sdk" = ["data/*.json", "templates/*.j2"]
+"juvera_sdk" = ["data/*.json", "templates/*.j2", "baselines/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

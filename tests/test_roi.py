@@ -26,8 +26,8 @@ def test_estimate_roi_basic(sdk_init):
 def test_estimate_roi_explicit_workflow(sdk_init):
     with j.agent_span(agent_id="a1", work_item_id="wi_001"):
         roi = j.estimate_roi(workflow_type="code_review", agent_cost_usd=5.0)
-    assert roi["baseline_cost_usd"] == 95.0
-    assert roi["estimated_savings_usd"] == 90.0
+    assert roi["baseline_cost_usd"] == 50.0
+    assert roi["estimated_savings_usd"] == 45.0  # 50.0 - 5.0 agent_cost
 
 
 def test_estimate_roi_zero_agent_cost(sdk_init):

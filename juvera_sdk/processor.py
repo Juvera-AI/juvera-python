@@ -163,6 +163,10 @@ class JuveraSpanProcessor(SpanProcessor):
                 baseline_cost = baseline["human_cost_usd"]
                 savings = baseline_cost - cost
                 lines.append(f"  ROI estimate: {fmt_savings(savings)} savings  |  {fmt_cost(baseline_cost)} baseline  |  {s['workflow_type']}")
+                confidence = baseline.get("confidence")
+                source_url = baseline.get("source_url")
+                if confidence and source_url:
+                    lines.append(f"    confidence: {confidence}  ·  {source_url}")
 
         lines.append("=" * 50)
         lines.append("")

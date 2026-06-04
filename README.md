@@ -321,7 +321,7 @@ Must be called inside an `agent_span`. Calling it outside emits the handoff on a
 
 ## ROI estimation
 
-Most companies can't answer "what's this agent worth?" The SDK ships with **workflow baselines** — industry-standard benchmarks for common agent tasks:
+Most companies can't answer "what's this agent worth?" The SDK ships with **workflow baselines** — documented, range-aware estimates anchored to BLS 2025 labor-cost data plus published industry research. See the [methodology page](https://juvera.ai/baselines) for per-baseline sourcing, confidence bands, and override patterns.
 
 | Workflow Type | Human Cost | Human Time |
 |---|---|---|
@@ -329,7 +329,7 @@ Most companies can't answer "what's this agent worth?" The SDK ships with **work
 | `lead_qualification` | $35 | 25 min |
 | `document_review` | $75 | 45 min |
 | `data_extraction` | $18 | 12 min |
-| `code_review` | $95 | 30 min |
+| `code_review` | $50 | 30 min |
 | `compliance_check` | $120 | 60 min |
 | `content_generation` | $50 | 30 min |
 
@@ -343,14 +343,21 @@ with j.agent_span(agent_id="a1", work_item_id="wi_001",
     # roi = {'estimated_savings_usd': 19.50, 'baseline_cost_usd': 22.0, ...}
 ```
 
-Override defaults with your own baselines:
+**Don't trust our numbers?** Override them in two lines. The baseline values that ship in the SDK are midpoints calibrated to mid-market mid-tier roles; if your team is offshore (lower) or FAANG-tier (higher), your real cost-per-workflow is different. Override at SDK init:
 
 ```python
 j.init(
     api_key="jvr_key", org_id="org_id",
-    workflow_baselines={"internal_review": {"human_cost_usd": 60.0, "human_time_minutes": 40}},
+    workflow_baselines={
+        # Your actual ticket-handle cost — measured, not guessed
+        "ticket_deflection": {"human_cost_usd": 12.0, "human_time_minutes": 8},
+        # Your actual code review cost for FAANG-tier senior engineers
+        "code_review": {"human_cost_usd": 95.0, "human_time_minutes": 30},
+    },
 )
 ```
+
+The [methodology page](https://juvera.ai/baselines) shows how our defaults are derived. Override what doesn't match your reality.
 
 ---
 

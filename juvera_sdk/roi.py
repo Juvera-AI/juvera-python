@@ -9,14 +9,70 @@ from opentelemetry import trace as _trace
 from juvera_sdk.costs import compute_token_cost_usd
 
 
-WORKFLOW_BASELINES: dict[str, dict[str, float]] = {
-    "ticket_deflection":  {"human_cost_usd": 22.0,  "human_time_minutes": 15},
-    "lead_qualification": {"human_cost_usd": 35.0,  "human_time_minutes": 25},
-    "document_review":    {"human_cost_usd": 75.0,  "human_time_minutes": 45},
-    "data_extraction":    {"human_cost_usd": 18.0,  "human_time_minutes": 12},
-    "code_review":        {"human_cost_usd": 95.0,  "human_time_minutes": 30},
-    "compliance_check":   {"human_cost_usd": 120.0, "human_time_minutes": 60},
-    "content_generation": {"human_cost_usd": 50.0,  "human_time_minutes": 30},
+WORKFLOW_BASELINES: dict[str, dict[str, Any]] = {
+    "ticket_deflection": {
+        "human_cost_usd": 22.0,
+        "human_cost_usd_range": [15.0, 32.0],
+        "human_time_minutes": 15,
+        "human_time_minutes_range": [10, 25],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#ticket_deflection",
+        "last_reviewed": "2026-05-27",
+    },
+    "lead_qualification": {
+        "human_cost_usd": 35.0,
+        "human_cost_usd_range": [20.0, 60.0],
+        "human_time_minutes": 25,
+        "human_time_minutes_range": [10, 30],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#lead_qualification",
+        "last_reviewed": "2026-05-27",
+    },
+    "document_review": {
+        "human_cost_usd": 75.0,
+        "human_cost_usd_range": [30.0, 140.0],
+        "human_time_minutes": 45,
+        "human_time_minutes_range": [30, 60],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#document_review",
+        "last_reviewed": "2026-05-27",
+    },
+    "data_extraction": {
+        "human_cost_usd": 18.0,
+        "human_cost_usd_range": [5.0, 40.0],
+        "human_time_minutes": 12,
+        "human_time_minutes_range": [8, 23],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#data_extraction",
+        "last_reviewed": "2026-05-27",
+    },
+    "code_review": {
+        "human_cost_usd": 50.0,
+        "human_cost_usd_range": [20.0, 95.0],
+        "human_time_minutes": 30,
+        "human_time_minutes_range": [20, 45],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#code_review",
+        "last_reviewed": "2026-05-27",
+    },
+    "compliance_check": {
+        "human_cost_usd": 120.0,
+        "human_cost_usd_range": [50.0, 180.0],
+        "human_time_minutes": 60,
+        "human_time_minutes_range": [45, 90],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#compliance_check",
+        "last_reviewed": "2026-05-27",
+    },
+    "content_generation": {
+        "human_cost_usd": 50.0,
+        "human_cost_usd_range": [20.0, 100.0],
+        "human_time_minutes": 30,
+        "human_time_minutes_range": [15, 75],
+        "confidence": "medium",
+        "source_url": "https://juvera.ai/baselines#content_generation",
+        "last_reviewed": "2026-05-27",
+    },
 }
 
 
@@ -106,4 +162,6 @@ def estimate_roi(
         "agent_cost_usd": round(cost, 6),
         "time_saved_minutes": round(time_saved, 6),
         "workflow_type": eff_workflow_type,
+        "confidence": baseline.get("confidence"),
+        "source_url": baseline.get("source_url"),
     }
