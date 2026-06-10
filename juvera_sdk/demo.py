@@ -8,7 +8,11 @@ from typing import Any
 
 from juvera_sdk._fmt import fmt_cost, fmt_savings, fmt_pct
 from juvera_sdk.costs import compute_token_cost_usd
-from juvera_sdk.roi import WORKFLOW_BASELINES, estimate_roi
+from juvera_sdk.roi import (
+    WORKFLOW_BASELINES,
+    estimate_roi,
+    resolve_baseline_from_runtime,
+)
 
 
 # Synthetic scenarios per workflow. Tuned so token counts are realistic for
@@ -71,6 +75,10 @@ def generate_synthetic_run(
         provider=scenario["provider"],
     )
     roi = estimate_roi(workflow_type, agent_cost_usd=cost) or {}
+    # Resolve baseline metadata for the event so the cross-process
+    # `juvera report` CLI can attribute correctly without needing
+    # access to the user's config.
+    _baseline, _baseline_source = resolve_baseline_from_runtime(workflow_type)
     run_id = "".join(rng.choices("0123456789ABCDEFGHJKMNPQRSTVWXYZ", k=26))
     return {
         "schema_version": "1",
@@ -90,6 +98,10 @@ def generate_synthetic_run(
         "tool_calls": scenario["tool_calls"],
         "error": None,
         "estimated_savings_usd": roi.get("estimated_savings_usd"),
+        "baseline_cost_usd": _baseline.get("human_cost_usd") if _baseline else None,
+        "baseline_source": _baseline_source,
+        "baseline_confidence": _baseline.get("confidence") if _baseline_source == "default" else None,
+        "baseline_source_url": _baseline.get("source_url") if _baseline_source == "default" else None,
         "_user_message": scenario["user_message"],  # for the card; not part of canonical schema
     }
 
@@ -121,11 +133,18 @@ def render_roi_card(
     box = _box_chars(unicode)
     arrow = "→" if unicode else "->"
     dot = "·" if unicode else "-"
-    baseline = WORKFLOW_BASELINES.get(run["workflow_type"], {})
+    # Resolve baseline through the override-aware helper so the in-process
+    # render honors j.init(workflow_baselines={...}). Badge only renders for
+    # default source — customer overrides aren't Juvera's to certify.
+    baseline, baseline_source = resolve_baseline_from_runtime(run["workflow_type"])
     baseline_cost = baseline.get("human_cost_usd", 0.0)
     baseline_time = baseline.get("human_time_minutes", 0)
-    confidence_label = baseline.get("confidence")
-    source_url = baseline.get("source_url")
+    if baseline_source == "default":
+        confidence_label = baseline.get("confidence")
+        source_url = baseline.get("source_url")
+    else:
+        confidence_label = None
+        source_url = None
     agent_cost = run["agent_cost_usd"]
     stored_savings = run.get("estimated_savings_usd")
     savings = stored_savings if stored_savings is not None else (baseline_cost - agent_cost)

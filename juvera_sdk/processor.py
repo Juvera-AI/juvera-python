@@ -156,17 +156,20 @@ class JuveraSpanProcessor(SpanProcessor):
             lines.append(f"  Estimated cost: {fmt_cost(cost)}")
 
         if s["workflow_type"]:
-            from juvera_sdk.roi import WORKFLOW_BASELINES
-            baseline = WORKFLOW_BASELINES.get(s["workflow_type"])
+            from juvera_sdk.roi import resolve_baseline_from_runtime
+            baseline, baseline_source = resolve_baseline_from_runtime(s["workflow_type"])
             if baseline:
                 from juvera_sdk._fmt import fmt_cost, fmt_savings
                 baseline_cost = baseline["human_cost_usd"]
                 savings = baseline_cost - cost
                 lines.append(f"  ROI estimate: {fmt_savings(savings)} savings  |  {fmt_cost(baseline_cost)} baseline  |  {s['workflow_type']}")
-                confidence = baseline.get("confidence")
-                source_url = baseline.get("source_url")
-                if confidence and source_url:
-                    lines.append(f"    confidence: {confidence}  ·  {source_url}")
+                # Badge only renders for default baselines — customer overrides
+                # aren't Juvera's to certify.
+                if baseline_source == "default":
+                    confidence = baseline.get("confidence")
+                    source_url = baseline.get("source_url")
+                    if confidence and source_url:
+                        lines.append(f"    confidence: {confidence}  ·  {source_url}")
 
         lines.append("=" * 50)
         lines.append("")

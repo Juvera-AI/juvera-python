@@ -99,7 +99,7 @@ def _normalize_otlp_envelope_to_events(
       ``juvera.tokens.input`` / ``juvera.tokens.output``
     """
     from juvera_sdk.costs import compute_token_cost_usd
-    from juvera_sdk.roi import estimate_roi, WORKFLOW_BASELINES
+    from juvera_sdk.roi import estimate_roi, resolve_baseline, WORKFLOW_BASELINES
 
     resource_spans = envelope.get("resourceSpans")
     if not resource_spans:
@@ -176,12 +176,21 @@ def _normalize_otlp_envelope_to_events(
 
                 # Savings (suppress unknown-workflow warnings)
                 estimated_savings_usd: float | None = None
+                _baseline: dict = {}
+                _baseline_source: str = "unknown"
                 if workflow_type in WORKFLOW_BASELINES:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
                         roi = estimate_roi(workflow_type, agent_cost_usd or 0.0)
                     if roi is not None:
                         estimated_savings_usd = roi.get("estimated_savings_usd")
+                    # Relay is a SEPARATE PROCESS from the user's app — it has no
+                    # juvera_sdk._config, so resolve_baseline(..., config=None)
+                    # returns source='default' for known workflows. Pre-existing
+                    # limitation: user overrides don't survive to disk via this
+                    # path. Tracked separately for a future revision that pipes
+                    # overrides via OTel resource attrs or side-channel config.
+                    _baseline, _baseline_source = resolve_baseline(workflow_type, config=None)
 
                 event: dict[str, Any] = {
                     "schema_version": "1",
@@ -203,6 +212,10 @@ def _normalize_otlp_envelope_to_events(
                         attrs.get("exception.message") or "error"
                     ),
                     "estimated_savings_usd": estimated_savings_usd,
+                    "baseline_cost_usd": _baseline.get("human_cost_usd") if _baseline else None,
+                    "baseline_source": _baseline_source,
+                    "baseline_confidence": _baseline.get("confidence") if _baseline_source == "default" else None,
+                    "baseline_source_url": _baseline.get("source_url") if _baseline_source == "default" else None,
                 }
                 yield event
 

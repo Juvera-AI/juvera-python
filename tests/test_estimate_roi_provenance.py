@@ -16,6 +16,9 @@ def test_returns_confidence_and_source_url_for_known_workflow():
     assert "source_url" in result, "missing source_url key in estimate_roi return"
     assert result["confidence"] == "medium"
     assert result["source_url"] == "https://juvera.ai/baselines#ticket_deflection"
+    # NEW — Task 2 of hotfix: baseline_source surfaced for consumers that
+    # need to know whether the numbers came from default or override.
+    assert result["baseline_source"] == "default"
 
 
 def test_existing_keys_still_present():
@@ -28,6 +31,7 @@ def test_existing_keys_still_present():
         "agent_cost_usd",
         "time_saved_minutes",
         "workflow_type",
+        "baseline_source",  # NEW
     ):
         assert key in result, f"missing existing key {key!r}"
 
@@ -53,11 +57,18 @@ def test_no_workflow_returns_none_with_warning():
 def test_custom_workflow_override_returns_none_source_url():
     """When a customer overrides via j.init(workflow_baselines={"internal_review": {...}})
     without providing source_url, estimate_roi() must return source_url=None — NOT a
-    fabricated juvera.ai anchor that would 404. Same for confidence."""
+    fabricated juvera.ai anchor that would 404. Same for confidence.
+
+    Test uses endpoint='local' + try/finally: j.shutdown() so it (a) doesn't
+    construct a cloud-pointing OTel exporter, and (b) doesn't leak _config
+    into later test modules. Mirrors tests/test_estimate_roi_init_compat.py.
+    """
     import juvera_sdk as j
     j.init(
-        api_key="test",
-        org_id="test",
+        api_key="jvr_test",
+        org_id="org_test",
+        endpoint="local",
+        debug=True,
         workflow_baselines={
             "internal_review": {
                 "human_cost_usd": 60.0,
@@ -65,12 +76,16 @@ def test_custom_workflow_override_returns_none_source_url():
             }
         },
     )
-    result = estimate_roi("internal_review", agent_cost_usd=1.0)
-    assert result is not None
-    assert result["baseline_cost_usd"] == 60.0
-    assert result["confidence"] is None, (
-        "custom override without confidence must return None, not 'low'"
-    )
-    assert result["source_url"] is None, (
-        "custom override without source_url must return None, not a fabricated juvera.ai URL"
-    )
+    try:
+        result = estimate_roi("internal_review", agent_cost_usd=1.0)
+        assert result is not None
+        assert result["baseline_cost_usd"] == 60.0
+        assert result["confidence"] is None, (
+            "custom override without confidence must return None, not 'low'"
+        )
+        assert result["source_url"] is None, (
+            "custom override without source_url must return None, not a fabricated juvera.ai URL"
+        )
+        assert result["baseline_source"] == "override"
+    finally:
+        j.shutdown()

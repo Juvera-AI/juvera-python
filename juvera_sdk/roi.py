@@ -2,11 +2,14 @@
 from __future__ import annotations
 import importlib
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 from opentelemetry import trace as _trace
 from juvera_sdk.costs import compute_token_cost_usd
+
+if TYPE_CHECKING:
+    from juvera_sdk.config import JuveraConfig
 
 
 WORKFLOW_BASELINES: dict[str, dict[str, Any]] = {
@@ -76,6 +79,52 @@ WORKFLOW_BASELINES: dict[str, dict[str, Any]] = {
 }
 
 
+def resolve_baseline(
+    workflow_type: str,
+    config: "JuveraConfig | None",
+) -> tuple[dict[str, Any], str]:
+    """Return (baseline_dict, source) for a workflow_type, honoring overrides.
+
+    source ∈ {'default', 'override', 'unknown'}.
+
+    Used by estimate_roi() and by every display surface (demo render,
+    processor print_summary) so badge attribution is consistent.
+    A 'default' source means the baseline came from the SDK's documented
+    WORKFLOW_BASELINES — methodology badge should render. 'override' means
+    the customer supplied their own number via j.init(workflow_baselines=...) —
+    Juvera does not certify these numbers, so badges suppress. 'unknown'
+    means the workflow appears in neither — no row data.
+
+    Pass config=None when called from a process that has no juvera_sdk._config
+    (e.g. the `juvera report` CLI which renders persisted events from disk).
+    """
+    if config is not None and config.workflow_baselines and workflow_type in config.workflow_baselines:
+        return config.workflow_baselines[workflow_type], "override"
+    if workflow_type in WORKFLOW_BASELINES:
+        return WORKFLOW_BASELINES[workflow_type], "default"
+    return {}, "unknown"
+
+
+def resolve_baseline_from_runtime(workflow_type: str) -> tuple[dict[str, Any], str]:
+    """In-process convenience wrapper around resolve_baseline().
+
+    Reads the current process's juvera_sdk._config (None if SDK wasn't
+    initialized — e.g. tests that don't call j.init()) and forwards to
+    resolve_baseline. Used by demo render, processor print_summary, and
+    demo event creation so they share one override-resolution path.
+
+    Do NOT use from cross-process callers (e.g. the `juvera report` CLI
+    or local_relay.py) — they explicitly pass config=None to resolve_baseline
+    to make the no-overrides expectation visible at the call site.
+    """
+    from juvera_sdk import _get_config  # lazy to avoid circular import
+    try:
+        config = _get_config()
+    except RuntimeError:
+        config = None
+    return resolve_baseline(workflow_type, config)
+
+
 def _auto_compute_agent_cost() -> float:
     """Read model + tokens from the current span and compute cost.
 
@@ -132,15 +181,18 @@ def estimate_roi(
         )
         return None
 
-    baselines = dict(WORKFLOW_BASELINES)
-    if config is not None and config.workflow_baselines:
-        baselines.update(config.workflow_baselines)
-
-    baseline = baselines.get(eff_workflow_type)
-    if baseline is None:
+    baseline, baseline_source = resolve_baseline(eff_workflow_type, config)
+    if baseline_source == "unknown":
+        # Hint lists BOTH defaults and the user's overrides — preserves the
+        # pre-refactor behavior that helped users spot typos like
+        # `j.init(workflow_baselines={"internal_revue": ...})` followed by
+        # `estimate_roi("internal_review")`.
+        known_types = list(WORKFLOW_BASELINES.keys())
+        if config is not None and config.workflow_baselines:
+            known_types = sorted(set(known_types) | set(config.workflow_baselines.keys()))
         warnings.warn(
             f"No baseline found for workflow_type={eff_workflow_type!r}. "
-            f"Known types: {list(baselines.keys())}. "
+            f"Known types: {known_types}. "
             f"Pass custom baselines via init(workflow_baselines={{...}}).",
             stacklevel=2,
         )
@@ -164,4 +216,5 @@ def estimate_roi(
         "workflow_type": eff_workflow_type,
         "confidence": baseline.get("confidence"),
         "source_url": baseline.get("source_url"),
+        "baseline_source": baseline_source,
     }
